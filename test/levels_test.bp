@@ -3,6 +3,7 @@
 
 import {testing.asserts} from "std";
 import {levels.Level, levels.levelName, levels.levelRank, levels.otpLevel, levels.rankOf, levels.rankName, levels.validLevels};
+import {levels.Threshold, levels.Levels, levels.parseThreshold, levels.thresholdAdmits, levels.levelEnabled, levels.levelsProblem};
 
 test "levels: names, ranks and the OTP severities" {
     try asserts.equals(
@@ -40,4 +41,76 @@ test "levels: rankName writes the uppercase name" {
     try asserts.equals(rankName(4), "ERROR");
     try asserts.equals(rankName(5), "OFF");
     try asserts.equals(rankName(-1), "OFF");
+}
+
+test "levels: parseThreshold reads the spellings and refuses the rest" {
+    val trace = try parseThreshold("trace");
+    val warn = try parseThreshold("warning");
+    val off = try parseThreshold("off");
+    try asserts.isTrue(thresholdAdmits(trace, Level.Trace));
+    try asserts.isFalse(thresholdAdmits(warn, Level.Info));
+    try asserts.isTrue(thresholdAdmits(warn, Level.Warn));
+    try asserts.isTrue(thresholdAdmits(warn, Level.Error));
+    try asserts.isFalse(thresholdAdmits(off, Level.Error));
+    val refused = case parseThreshold("fatal") {
+        Ok(_) -> "";
+        Error(reason) -> reason;
+    };
+    try asserts.equals(
+        refused,
+        "log.parseThreshold: \"fatal\" is not a level - accepted: trace, debug, info, warn, error, off",
+    );
+}
+
+fn sample() -> Levels {
+    return Levels(
+        root: Threshold.From(level: Level.Info),
+        names: [
+            #("app", Threshold.From(level: Level.Warn)),
+            #("app.billing", Threshold.From(level: Level.Trace)),
+            #("app.billing.audit", Threshold.Off),
+        ],
+    );
+}
+
+test "levels: the longest dotted prefix set wins, the root otherwise" {
+    val l = sample();
+    try asserts.isTrue(levelEnabled(l, "other", Level.Info));
+    try asserts.isFalse(levelEnabled(l, "other", Level.Debug));
+    try asserts.isFalse(levelEnabled(l, "app", Level.Info));
+    try asserts.isTrue(levelEnabled(l, "app.web", Level.Warn));
+    try asserts.isFalse(levelEnabled(l, "app.web.router", Level.Info));
+    try asserts.isTrue(levelEnabled(l, "app.billing", Level.Trace));
+    try asserts.isTrue(levelEnabled(l, "app.billing.invoices", Level.Trace));
+    try asserts.isFalse(levelEnabled(l, "app.billing.audit", Level.Error));
+    try asserts.isFalse(
+        levelEnabled(l, "app.billing.audit.trail", Level.Error),
+    );
+    try asserts.isTrue(levelEnabled(l, "application", Level.Info));
+    try asserts.equals(levelsProblem(l), "");
+}
+
+test "levels: an empty name, an empty segment and a name set twice are refused" {
+    val on = Threshold.From(level: Level.Info);
+    try asserts.equals(
+        levelsProblem(Levels(root: on, names: [#("", on)])),
+        "log.Levels: a logger name is empty",
+    );
+    try asserts.equals(
+        levelsProblem(Levels(root: on, names: [#("app..web", on)])),
+        "log.Levels: the logger name \"app..web\" has an empty segment",
+    );
+    try asserts.equals(
+        levelsProblem(Levels(root: on, names: [#("app.", on)])),
+        "log.Levels: the logger name \"app.\" has an empty segment",
+    );
+    try asserts.equals(
+        levelsProblem(
+            Levels(
+                root: on,
+                names: [#("app", on), #("web", on), #("app", Threshold.Off)],
+            ),
+        ),
+        "log.Levels: the logger name \"app\" is set twice",
+    );
 }

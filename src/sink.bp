@@ -1,9 +1,9 @@
-//// log — where a record goes: the injected sink (decision 195).
+//// log — where a record goes: the injected sink (decisions 195, 349).
 ////
-//// The package renders and digests; it does not decide where a line is
-//// written, nor which levels are on. A framework hands it both at boot with
-//// `setSink`: rakun-logging installs its level resolver and its OTP handlers,
-//// onze sets nothing but the sink. `enabled(logger, level)` is asked BEFORE a
+//// A framework chooses where a line is written and which levels are on, and
+//// hands both to the package at boot with `setSink`: rakun builds one of the
+//// sinks below from its typed configuration, onze installs one. A sink is
+//// any `LogSink`; `enabled(logger, level)` is asked BEFORE a
 //// record is built, so a message for a level that is off is never rendered;
 //// `write(record)` receives the whole record and renders it itself (a sink may
 //// write one schema to the console and another to a file).
@@ -16,10 +16,19 @@
 ////
 //// THE SINK IS HOST STATE: botopink has no top-level mutable state. Erlang
 //// keeps it in `persistent_term` under `{log, sink}` — set once at boot, read
-//// by every process; node keeps it on `globalThis.__bp_log`.
+//// by every process; node keeps it on `globalThis.__bp_log`. wasm has no
+//// binding that holds a value across calls (language-gaps.md), so the slot
+//// is refused there at its declaration (146), never answered wrongly.
+////
+//// THE SINKS `log` SHIPS (decision 349): `consoleSink` writes each record's
+//// line on standard output through `@print` — a builtin every target lowers,
+//// so no host cell; `fileSink` (`logfile.bp`) appends to a file it rotates;
+//// `fanOut` hands each record to every sink of a list that takes it. Each
+//// takes a `Levels` (per-name thresholds), and a framework installs the one
+//// it built with `setSink`.
 
-import {levels.Level, levels.levelRank, levels.otpLevel};
-import {formats.LogRecord, formats.renderPlain};
+import {levels.Level, levels.Levels, levels.levelRank, levels.otpLevel, levels.levelEnabled, levels.levelsProblem};
+import {formats.Format, formats.LogRecord, formats.renderPlain, formats.renderRecord};
 
 pub type LogSink(
     enabled: fn(logger: string, level: Level) -> bool,
@@ -28,7 +37,15 @@ pub type LogSink(
 
 #[@External.Node("""(function(__L, __T){ (__L === "error" ? console.error : __L === "warning" ? console.warn : console.log)(__T); return 0; })($0, $1)""")]
 #[@External.Erlang("""(fun(LgL__, LgT__) -> logger:log(binary_to_existing_atom(LgL__, utf8), "~ts", [LgT__]), 0 end)($0, $1)""")]
+#[@External.Wasm("fn:printLine")]
 declare fn hostWrite(otpLevel: string, line: string) -> i32;
+
+// wasm's host write: the line on standard output, whatever the level — the
+// one stream a wasm program writes on both of its hosts.
+fn printLine(otpLevel: string, line: string) -> i32 {
+    @print(line);
+    return 0;
+}
 
 // The sink in force until one is set: `info` and above, the `plain` line,
 // through the host's logger.
@@ -39,6 +56,7 @@ pub fn defaultSink() -> LogSink {
     );
 }
 
+// LANGUAGE GAP: wasm has no binding that keeps a value across calls — the sink slot is refused on wasm.
 #[@External.Node("""(function(__S){ var __V = (globalThis.__bp_log ||= { sink: null }); __V.sink = __S; return 0; })($0)""")]
 #[@External.Erlang("""(fun(LgS__) -> persistent_term:put({log, sink}, LgS__), 0 end)($0)""")]
 declare fn putSink(sink: LogSink) -> i32;
@@ -55,4 +73,49 @@ pub fn setSink(sink: LogSink) -> i32 {
 // The sink in force: the last one set, or `defaultSink()`.
 pub fn currentSink() -> LogSink {
     return sinkOr(defaultSink());
+}
+
+fn writeLine(line: string) -> i32 {
+    @print(line);
+    return 0;
+}
+
+// A sink writing each record it takes as one `format` line on standard
+// output. A record passes when `levels` admits its logger and level. Refused
+// when `levels` cannot be resolved (`levelsProblem`).
+pub fn consoleSink(format: Format, levels: Levels) -> @Result<LogSink, string> {
+    val problem = levelsProblem(levels);
+    if (problem != "") throw "log.consoleSink: " + problem;
+    return LogSink(
+        enabled: { logger, level -> levelEnabled(levels, logger, level) },
+        write: { r -> writeLine(renderRecord(format, r)) },
+    );
+}
+
+// One sink over several: a record is wanted when any sink takes it, and each
+// sink that takes it writes it, in list order. Answers the sum of the writes.
+pub fn fanOut(sinks: Array<LogSink>) -> LogSink {
+    return LogSink(
+        enabled: { logger, level -> anyTakes(sinks, logger, level) },
+        write: { r -> writeEach(sinks, r) },
+    );
+}
+
+fn anyTakes(sinks: Array<LogSink>, logger: string, level: Level) -> bool {
+    var taken = false;
+    for (sinks) { s ->
+        val enabled = s.enabled;
+        if (taken == false && enabled(logger, level)) taken = true;
+    }
+    return taken;
+}
+
+fn writeEach(sinks: Array<LogSink>, r: LogRecord) -> i32 {
+    var total = 0;
+    for (sinks) { s ->
+        val enabled = s.enabled;
+        val write = s.write;
+        if (enabled(r.logger, r.level)) total = total + write(r);
+    }
+    return total;
 }

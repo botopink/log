@@ -1,0 +1,76 @@
+//// log — the runtime's own reports, through the sink in force (decision 349).
+////
+//// `captureRuntimeReports()` makes the faults the runtime reports by itself
+//// reach the log as records of the logger `runtime`, at the moment they are
+//// reported, through the sink in force then (`currentSink`). Each record
+//// carries the field `report.kind`. It does not change what the runtime does
+//// with the fault: the host's own report and the host's own exit stay.
+////
+//// - BEAM (erlang, beam): a primary filter on OTP's `logger` (id
+////   `log_runtime_reports`) takes every event of the `otp` domain — crash
+////   reports, supervisor reports, SASL progress reports, an unlinked
+////   process's error — formats its message on one line and writes it at its
+////   level (`emergency`…`error` → error, `warning` → warn, `notice` / `info`
+////   → info, `debug` → debug), `report.kind` the `error_logger` type
+////   (`crash_report`, `supervisor_report`, `progress`, …) or the domain
+////   (`otp.sasl`). It hands the event on unchanged. OTP's primary level still
+////   applies before it (its default `notice` drops progress reports).
+//// - node: an `uncaughtExceptionMonitor` listener — it observes without
+////   handling, so the process still dies as node decides — writes an error
+////   record: the message `String(error)`, `report.kind` the origin
+////   (`uncaughtException`, or `unhandledRejection` for a rejection node
+////   raises as an uncaught exception, its default), and the error's stack
+////   under `error.stack_trace` when it has one.
+//// - wasm: a binding that captures nothing (a wasm program has no runtime
+////   reporting faults beside it: a trap ends the instance).
+////
+//// Calling it again keeps one capture.
+
+import {levels.Level};
+import {logging.Logger};
+
+#[@External.Node("""(function(__F){ var __V = (globalThis.__bp_log ||= { sink: null }); __V.report = __F; if (!__V.capturing) { __V.capturing = true; process.on('uncaughtExceptionMonitor', function(__E, __O){ globalThis.__bp_log.report("error", String(__O), String(__E), (__E && __E.stack) ? String(__E.stack) : ""); }); } return 0; })($0)""")]
+#[@External.Erlang("""(fun(LgF__) -> _ = logger:remove_primary_filter(log_runtime_reports), ok = logger:add_primary_filter(log_runtime_reports, {fun(#{level := LgLv__, meta := LgM__} = LgE__, LgFw__) -> case maps:get(domain, LgM__, []) of [otp | _] = LgD__ -> LgL__ = case LgLv__ of debug -> <<"debug">>; info -> <<"info">>; notice -> <<"info">>; warning -> <<"warn">>; _ -> <<"error">> end, LgK__ = case LgM__ of #{error_logger := #{type := LgT__}} when is_atom(LgT__) -> atom_to_binary(LgT__, utf8); _ -> iolist_to_binary(lists:join(<<".">>, [atom_to_binary(LgA__, utf8) || LgA__ <- LgD__])) end, LgX__ = unicode:characters_to_binary(logger_formatter:format(LgE__, #{single_line => true, template => [msg]})), _ = LgFw__(LgL__, LgK__, LgX__, <<>>), LgE__; _ -> LgE__ end; (LgE__, _) -> LgE__ end, LgF__}), 0 end)($0)""")]
+#[@External.Wasm("fn:captureNothing")]
+declare fn hostCapture(
+    report: fn(level: string, kind: string, message: string, stack: string) -> i32,
+) -> i32;
+
+fn captureNothing(
+    report: fn(level: string, kind: string, message: string, stack: string) -> i32,
+) -> i32 {
+    return 0;
+}
+
+fn levelOf(name: string) -> Level {
+    if (name == "debug") return Level.Debug;
+    if (name == "info") return Level.Info;
+    if (name == "warn") return Level.Warn;
+    if (name == "error") return Level.Error;
+    @panic(
+        "log.captureRuntimeReports: the host reported the level \""
+            + name
+            + "\"",
+    );
+}
+
+// Write one runtime report: logger `runtime`, field `report.kind`, and
+// `error.stack_trace` when the host handed a stack apart from the message.
+pub fn writeRuntimeReport(
+    level: string,
+    kind: string,
+    message: string,
+    stack: string,
+) -> i32 {
+    var fields: Array<#(string, string)> = [#("report.kind", kind)];
+    if (stack != "") fields.push(#("error.stack_trace", stack));
+    return Logger(name: "runtime").log(levelOf(level), message, fields);
+}
+
+// From now on, write the runtime's own fault reports through the sink in
+// force. Answers 0.
+pub fn captureRuntimeReports() -> i32 {
+    return hostCapture(
+        { level, kind, message, stack -> writeRuntimeReport(level, kind, message, stack) },
+    );
+}

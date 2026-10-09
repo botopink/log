@@ -7,8 +7,18 @@
 //// Debug both become `debug`, so a sink that filters must filter on the rank
 //// before the host call, as `LogSink.enabled` does.
 ////
-//// Moved from rakun-logging's `levels.bp` (decision 195); the level
-//// resolver over rakun's properties and groups stays rakun's.
+//// PER-NAME LEVELS (decision 349). A `Threshold` is a lowest level on, or
+//// `Off`. `Levels` maps logger names to thresholds: a threshold set on a
+//// name applies to it and to every dotted name beneath it, the longest
+//// prefix set wins, and `root` applies when none is. A name set twice, an
+//// empty name and a name with an empty segment are refused (`levelsProblem`
+//// when a sink is built, a panic when one is resolved) — never a guess at
+//// which entry wins.
+////
+//// Moved from rakun-logging's `levels.bp` (decision 195). Where the names and
+//// their thresholds come from — rakun's typed configuration, its groups, the
+//// `loggers` endpoint's run-time overrides — is the framework's: it builds a
+//// `Levels` and installs a sink over it again when one changes.
 
 pub type Level {
     Trace,
@@ -82,4 +92,97 @@ pub fn rankName(rank: i32) -> string {
     if (rank == 3) return "WARN";
     if (rank == 4) return "ERROR";
     return "OFF";
+}
+
+// ── per-name levels ─────────────────────────────────────────────────────────
+
+// The lowest level a logger name (or a sink) takes, or none.
+pub type Threshold {
+    From(level: Level),
+    Off,
+}
+
+// The threshold a spelling names — the spellings `rankOf` reads, `off`
+// among them. Any other spelling is refused, naming the accepted ones.
+pub fn parseThreshold(name: string) -> @Result<Threshold, string> {
+    val rank = rankOf(name);
+    if (rank == 0) return Threshold.From(level: Level.Trace);
+    if (rank == 1) return Threshold.From(level: Level.Debug);
+    if (rank == 2) return Threshold.From(level: Level.Info);
+    if (rank == 3) return Threshold.From(level: Level.Warn);
+    if (rank == 4) return Threshold.From(level: Level.Error);
+    if (rank == 5) return Threshold.Off;
+    throw "log.parseThreshold: \""
+        + name
+        + "\" is not a level - accepted: "
+        + validLevels();
+}
+
+// Whether a record at `level` passes `threshold`.
+pub fn thresholdAdmits(threshold: Threshold, level: Level) -> bool {
+    val admits = case threshold {
+        From(lowest) -> levelRank(level) >= levelRank(lowest);
+        Off -> false;
+    };
+    return admits;
+}
+
+// The thresholds of a program's loggers: `root`, and one per name.
+pub type Levels(
+    root: Threshold,
+    names: Array<#(string, Threshold)>,
+)
+
+// The first reason `levels` cannot be resolved, or "": an empty name, a name
+// with an empty segment (`a..b`, `.a`, `a.`), a name set twice.
+pub fn levelsProblem(levels: Levels) -> string {
+    var problem = "";
+    var seen: string[] = [];
+    for (levels.names) { entry ->
+        if (problem == "") problem = nameProblem(entry._0, seen);
+        seen.push(entry._0);
+    }
+    return problem;
+}
+
+fn nameProblem(name: string, seen: string[]) -> string {
+    if (name == "") return "log.Levels: a logger name is empty";
+    if (name.split(".").contains(""))
+        return "log.Levels: the logger name \""
+            + name
+            + "\" has an empty segment";
+    if (seen.contains(name))
+        return "log.Levels: the logger name \"" + name + "\" is set twice";
+    return "";
+}
+
+fn setOn(levels: Levels, name: string) -> Array<Threshold> {
+    var found: Array<Threshold> = [];
+    for (levels.names) { entry ->
+        if (entry._0 == name) found.push(entry._1);
+    }
+    return found;
+}
+
+// The threshold in force for `logger`: the one set on the longest dotted
+// prefix of the name (the name itself first), else `root`. A prefix set
+// twice panics, naming it.
+pub fn thresholdFor(levels: Levels, logger: string) -> Threshold {
+    var parts: string[] = logger.split(".");
+    var found: Array<Threshold> = [];
+    while (found.length == 0 && parts.length > 0) {
+        val prefix = parts.join(".");
+        found = setOn(levels, prefix);
+        if (found.length > 1)
+            @panic(
+                "log.Levels: the logger name \"" + prefix + "\" is set twice",
+            );
+        parts = parts.slice(0, parts.length - 1);
+    }
+    return found.at(0) ?? levels.root;
+}
+
+// Whether a record at `level` from `logger` passes the levels in force.
+pub fn levelEnabled(levels: Levels, logger: string, level: Level) -> bool {
+    return thresholdAdmits(thresholdFor(levels, logger), level);
 }

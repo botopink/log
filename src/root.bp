@@ -1,13 +1,16 @@
-//// log — levels, the log record, the four renderers, the one error digest and
-//// a `Logger` whose sink is injected. A bundled library (decisions 194, 195),
-//// neutral like `routing`: it imports `std` and nothing else, ships `.bp`
-//// files only (decision 117 rule 8) and is compiled for erlang and commonJS
-//// from one source, so a line and a digest read the same on both.
+//// log — levels and per-name thresholds, the log record, the four
+//// renderers, the one error digest, a `Logger` whose sink is injected, the
+//// console, file and fan-out sinks, and the capture of the runtime's own
+//// reports. A library (decisions 194, 195, 349), neutral like `routing`: it
+//// imports `std` and nothing else, ships `.bp` files only (decision 117 rule
+//// 8) and is compiled from one source for every target, so a line and a
+//// digest read the same everywhere.
 ////
 //// Consumers write `import {logging.Logger, digest.errorDigest} from "log";`
 //// (decision 107). Moved from rakun-logging's pure half (`levels.bp`,
-//// `formats.bp`, `digest.bp`, the `Logger`); its OTP cells stay rakun's, and
-//// rakun installs them as the sink. See `../AGENTS.md`.
+//// `formats.bp`, `digest.bp`, the `Logger`); its sinks and its capture are
+//// `log`'s (349) — rakun and onze choose, configure and install one at boot.
+//// See `../AGENTS.md`.
 ////
 //// The `files` ORDER in `botopink.json` is a dependency order: a module is
 //// listed before the siblings that import it.
@@ -16,4 +19,6 @@ pub mod levels;
 pub mod formats;
 pub mod digest;
 pub mod sink;
+pub mod logfile;
 pub mod logging;
+pub mod reports;

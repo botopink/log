@@ -1,0 +1,113 @@
+//// log — a file sink with rotation (decision 349).
+////
+//// `fileSink(file, format, levels)` appends each record it takes to
+//// `file.path` as one `format` line, creating the directories on the way.
+//// ROTATION is `logger_std_h`'s, written here once so every target rotates
+//// alike: after a write leaves the file at `maxBytes` or more, the file
+//// becomes `<path>.0`, `<path>.0` becomes `<path>.1`, … and
+//// `<path>.<maxFiles - 1>` is deleted; with `maxFiles` 0 the file is deleted
+//// and starts again. So the live file and its archives never hold more than
+//// `maxFiles + 1` files.
+////
+//// Every host call fails loudly: a line that cannot be appended, a size that
+//// cannot be read (other than a file that is not there), a rename or a
+//// delete that fails raises on the host — a log that silently stops writing
+//// is a lost log. A file that is not there reads `-1` bytes and is skipped by
+//// a rename or a delete.
+////
+//// Ported from rakun-logging's `install_file` (OTP `logger_std_h`
+//// `max_no_bytes` / `max_no_files`); the total size cap that rakun folds into
+//// the archive count stays rakun's (it hands `fileSink` the folded count).
+
+import {levels.Levels, levels.levelEnabled, levels.levelsProblem};
+import {formats.Format, formats.renderRecord};
+import {sink.LogSink};
+
+// The file a `fileSink` writes: its path, the size that rotates it, and the
+// archives kept.
+pub type LogFile(
+    path: string,
+    maxBytes: i64,
+    maxFiles: i32,
+)
+
+// LANGUAGE GAP: wasm has no binding that reaches the file system — the four file cells are refused on wasm.
+#[@External.Node("""(function(__P, __L){ var __fs = require('fs'); __fs.mkdirSync(require('path').dirname(__P), { recursive: true }); __fs.appendFileSync(__P, __L + "\n"); return 0; })($0, $1)""")]
+#[@External.Erlang("""(fun(LgP__, LgL__) -> ok = filelib:ensure_dir(LgP__), ok = file:write_file(LgP__, [LgL__, <<"\n">>], [append]), 0 end)($0, $1)""")]
+declare fn appendLine(path: string, line: string) -> i32;
+
+#[@External.Node("""(function(__P){ var __fs = require('fs'); return __fs.existsSync(__P) ? __fs.statSync(__P).size : -1; })($0)""")]
+#[@External.Erlang("""(fun(LgP__) -> case file:read_file_info(LgP__) of {ok, LgI__} -> element(2, LgI__); {error, enoent} -> -1 end end)($0)""")]
+declare fn fileBytes(path: string) -> i64;
+
+#[@External.Node("""(function(__F, __T){ var __fs = require('fs'); if (__fs.existsSync(__F)) __fs.renameSync(__F, __T); return 0; })($0, $1)""")]
+#[@External.Erlang("""(fun(LgF__, LgT__) -> case file:rename(LgF__, LgT__) of ok -> 0; {error, enoent} -> 0 end end)($0, $1)""")]
+declare fn moveFile(source: string, target: string) -> i32;
+
+#[@External.Node("""(function(__P){ var __fs = require('fs'); if (__fs.existsSync(__P)) __fs.unlinkSync(__P); return 0; })($0)""")]
+#[@External.Erlang("""(fun(LgP__) -> case file:delete(LgP__) of ok -> 0; {error, enoent} -> 0 end end)($0)""")]
+declare fn removeFile(path: string) -> i32;
+
+// The first reason `file` cannot be written, or "".
+pub fn logFileProblem(file: LogFile) -> string {
+    if (file.path == "") return "log.LogFile: the path is empty";
+    if (file.maxBytes <= 0)
+        return "log.LogFile: maxBytes is "
+            + file.maxBytes.toString()
+            + ", and a file rotates at a size of at least 1 byte";
+    if (file.maxFiles < 0)
+        return "log.LogFile: maxFiles is "
+            + file.maxFiles.toString()
+            + ", and the archives kept are 0 or more";
+    return "";
+}
+
+// The name of archive `index` of `path`: `<path>.<index>`, `.0` the newest.
+pub fn archiveName(path: string, index: i32) -> string {
+    return path + "." + index.toString();
+}
+
+// The size of the file at `path` in bytes, `-1` when there is none.
+pub fn logFileBytes(path: string) -> i64 {
+    return fileBytes(path);
+}
+
+// Shift the archives one up, the oldest out, and the live file to `.0`.
+pub fn rotate(file: LogFile) -> i32 {
+    if (file.maxFiles == 0) return removeFile(file.path);
+    val _o = removeFile(archiveName(file.path, file.maxFiles - 1));
+    var i = file.maxFiles - 2;
+    while (i >= 0) {
+        val _m = moveFile(
+            archiveName(file.path, i),
+            archiveName(file.path, i + 1),
+        );
+        i = i - 1;
+    }
+    return moveFile(file.path, archiveName(file.path, 0));
+}
+
+// Append `line` and rotate when the file reached `maxBytes`. Answers 0.
+pub fn appendRotating(file: LogFile, line: string) -> i32 {
+    val _a = appendLine(file.path, line);
+    if (fileBytes(file.path) >= file.maxBytes) val _r = rotate(file);
+    return 0;
+}
+
+// A sink appending each record it takes to `file` as one `format` line,
+// rotating it. A record passes when `levels` admits its logger and level.
+// Refused when `file` or `levels` cannot be used.
+pub fn fileSink(
+    file: LogFile,
+    format: Format,
+    levels: Levels,
+) -> @Result<LogSink, string> {
+    val fileProblem = logFileProblem(file);
+    if (fileProblem != "") throw "log.fileSink: " + fileProblem;
+    val levelsText = levelsProblem(levels);
+    if (levelsText != "") throw "log.fileSink: " + levelsText;
+    return LogSink(
+        enabled: { logger, level -> levelEnabled(levels, logger, level) },
+        write: { r -> appendRotating(file, renderRecord(format, r)) },
+    );
+}

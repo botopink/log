@@ -2,17 +2,23 @@
 
 > Repository: `botopink/log` (`git@github.com:botopink/log.git`) · in the meta checkout: `repository/log/`
 
-The `log` library (decisions 194 and 195): the five levels, the log
-record, the ECS / GELF / logstash / plain renderers, the one error digest, and
-a `Logger` whose sink is injected. One source compiled for erlang and
-commonJS, so a record renders the same line and a fault the same digest on
-both. The pure half of rakun-logging (`levels.bp`, `formats.bp`, `digest.bp`,
-the `Logger`) moved here by `specs/1.0.11-beta/03-bundled-libs/106-log`;
-rakun-logging's OTP cells stay rakun's, and rakun installs them as the sink.
+The `log` library (decisions 194, 195 and 349): the five levels and per-name
+thresholds, the log record, the ECS / GELF / logstash / plain renderers, the
+one error digest, a `Logger` whose sink is injected, the sinks — console, a
+file with rotation, a fan-out — and the capture of the runtime's own fault
+reports. One source for every target, so a record renders the same line and a
+fault the same digest everywhere. The pure half of rakun-logging
+(`levels.bp`, `formats.bp`, `digest.bp`, the `Logger`) moved here by
+`specs/1.0.11-beta/03-bundled-libs/106-log`; its console and file handlers and
+its capture became `log`'s by decision 349 (`specs/1.0.12-beta/03-bundled-libs/106-log`
+step 3). rakun and onze only choose, configure and install a sink at boot, and
+call the capture; the correlation id, rakun's configuration record and the
+actuator endpoints stay rakun's.
 
 Imports `std` and nothing else (`json`, `hash`, `io.clock`, `io.os`,
-`io.process`). Ships `.bp` files only — target-native code is three inline
-`#[@External.<Target>(…)]` templates in `sink.bp` (decision 117 rule 8).
+`io.process`). Ships `.bp` files only — target-native code is inline
+`#[@External.<Target>(…)]` templates in `sink.bp`, `logfile.bp` and
+`reports.bp` (decision 117 rule 8); § Host cells lists them.
 
 **A library of its own** (decision 326). It was bundled with the compiler until
 `03-bundled-libs/138` moved it here with its history; the compiler now embeds std alone.
@@ -33,17 +39,24 @@ log/
 ├── botopink.json     "name": "log", "target": "erlang", "targets": ["erlang", "commonJS"], no dependencies
 ├── AGENTS.md         ← you are here
 ├── src/
-│   ├── root.bp         pub mod levels; formats; digest; sink; logging
+│   ├── root.bp         pub mod levels; formats; digest; sink; logfile; logging; reports
 │   ├── levels.bp       Level { Trace, Debug, Info, Warn, Error }, levelName, levelRank, otpLevel,
-│   │                   validLevels, rankOf, rankName
+│   │                   validLevels, rankOf, rankName; Threshold { From(level), Off },
+│   │                   parseThreshold, thresholdAdmits, Levels(root, names), levelsProblem,
+│   │                   thresholdFor, levelEnabled
 │   ├── formats.bp      LogRecord, Format { Ecs, Gelf, Logstash, Plain }, validFormats, parseFormat,
 │   │                   formatName, isoTimestamp, gelfTimestamp, renderEcs, gelfLevel, gelfKey,
 │   │                   renderGelf, logstashLevelValue, renderLogstash, renderPlain, renderRecord
 │   ├── digest.bp       stripLineNumbers, topFramesOf, digestInput, errorDigest, clientErrorBody
-│   ├── sink.bp         LogSink(enabled, write), defaultSink, setSink, currentSink   (the sink slot: templates)
-│   └── logging.bp      Logger(name): trace/debug/info/warn/error (+ …With fields), log, isEnabled,
-│                       lazily, logError
-└── test/             digest · formats · levels · logging   (suites `digest:` `formats:` `levels:` `logging:`)
+│   ├── sink.bp         LogSink(enabled, write), defaultSink, setSink, currentSink   (the sink slot: templates),
+│   │                   consoleSink, fanOut
+│   ├── logfile.bp      LogFile(path, maxBytes, maxFiles), fileSink, logFileProblem, archiveName,
+│   │                   logFileBytes, rotate, appendRotating   (the four file cells: templates)
+│   ├── logging.bp      Logger(name): trace/debug/info/warn/error (+ …With fields), log, isEnabled,
+│   │                   lazily, logError
+│   └── reports.bp      captureRuntimeReports, writeRuntimeReport   (the capture: templates)
+└── test/             digest · formats · levels · logfile · logging · reports · sinks
+                      (suites `digest:` `formats:` `levels:` `logfile:` `logging:` `reports:` `sinks:`)
 ```
 
 `botopink.json`'s `files` order is a dependency order: a module is listed before
@@ -68,6 +81,18 @@ pub fn defaultSink() -> LogSink
 
 pub type Logger(name: string)
 // Logger.logError(module, errorClass, message, topFrames, fields) -> string — the digest
+
+pub type Threshold { From(level: Level), Off }
+pub fn parseThreshold(name: string) -> @Result<Threshold, string>
+pub type Levels(root: Threshold, names: Array<#(string, Threshold)>)
+pub fn levelEnabled(levels: Levels, logger: string, level: Level) -> bool
+
+pub fn consoleSink(format: Format, levels: Levels) -> @Result<LogSink, string>
+pub type LogFile(path: string, maxBytes: i64, maxFiles: i32)
+pub fn fileSink(file: LogFile, format: Format, levels: Levels) -> @Result<LogSink, string>
+pub fn fanOut(sinks: Array<LogSink>) -> LogSink
+
+pub fn captureRuntimeReports() -> i32
 ```
 
 - **No name std or a framework exports** (decision 163): the sink type is
@@ -104,6 +129,37 @@ pub type Logger(name: string)
   `error.digest` — and answers the digest, also when the sink takes no
   errors. It is the render's way to the logger: there is no
   `RenderHooks.onError`.
+- **Per-name levels** (349): a `Threshold` set on a logger name applies to it
+  and every dotted name beneath it; the longest prefix set wins, `root`
+  otherwise. An empty name, an empty segment and a name set twice are refused
+  — `levelsProblem` when a sink is built, a panic when `thresholdFor` meets
+  one — never resolved by guessing an entry. `parseThreshold` reads `rankOf`'s
+  spellings (`off` among them). Where the names come from (rakun's typed
+  configuration, its groups, the `loggers` endpoint's overrides) is the
+  framework's: it builds a `Levels` and installs a sink over it again when one
+  changes.
+- **The sinks** (349): `consoleSink` writes one `format` line per record on
+  standard output through `@print` — a builtin every target lowers, so no host
+  cell; `fileSink` appends one line per record to `file.path` (directories
+  created) and rotates it as OTP `logger_std_h` does, written once in
+  botopink: after a write leaves the file at `maxBytes` or more, the file
+  becomes `<path>.0`, each archive moves one up and `<path>.<maxFiles - 1>` is
+  deleted; `maxFiles` 0 deletes the file. A failed append, size read, rename
+  or delete raises (a file that is not there reads `-1` bytes and is skipped).
+  `fanOut` hands a record to each of its sinks that takes it, in list order.
+  Each is refused (`Error`, naming the field) on levels or a file it cannot
+  use. The total size cap rakun folds into the archive count stays rakun's.
+- **The runtime's reports** (349): `captureRuntimeReports()` writes the
+  faults the runtime reports by itself through the sink in force, as records
+  of the logger `runtime` with the field `report.kind`; it changes nothing the
+  host does with the fault. BEAM: a primary `logger` filter
+  (`log_runtime_reports`) on the `otp` domain — crash, supervisor and SASL
+  reports — its message formatted on one line, its OTP level mapped onto the
+  five, `report.kind` the `error_logger` type or the domain; the event goes on
+  unchanged. node: an `uncaughtExceptionMonitor` listener (it observes, node
+  still exits), level error, the message `String(error)`, `report.kind` the
+  origin (`uncaughtException` / `unhandledRejection`), the stack under
+  `error.stack_trace`. wasm: a no-op binding. A second call keeps one capture.
 - **The record's facts** a `Logger` fills: `millis` from `clock.nowMillis`,
   `pid` the OS process id (`io.process.pid`, imported as `host` — a
   module-level `process` shadows Node's global), `node` the host name,
@@ -112,29 +168,38 @@ pub type Logger(name: string)
 
 ## Host cells
 
-| State | Erlang | Node |
-|---|---|---|
-| the sink slot (`putSink` / `sinkOr`) | `persistent_term` entry `{log, sink}` — set once at boot, read by every process | `sink` on `globalThis.__bp_log` (`{ sink: null }`, created by whichever template runs first) |
-| the default write (`hostWrite`) | `logger:log(<otp level>, "~ts", [Line])` | `console.error` / `console.warn` / `console.log` |
+Decision 349: every cell is bound on erlang/beam, commonJS and wasm, never on
+some only. Where wasm has no binding, the cell carries a `// LANGUAGE GAP`
+marker naming the row of `specs/1.0.12-beta/language-gaps.md`, and a wasm
+build is refused at every function reaching it (146) — never compiled
+silently.
+
+| Cell | Erlang / beam | Node | wasm |
+|---|---|---|---|
+| the sink slot (`putSink` / `sinkOr`) | `persistent_term` entry `{log, sink}` — set once at boot, read by every process | `sink` on `globalThis.__bp_log` (`{ sink: null }`, created by whichever template runs first) | none — GAP: no binding keeps a value across calls |
+| the default write (`hostWrite`) | `logger:log(<otp level>, "~ts", [Line])` | `console.error` / `console.warn` / `console.log` | `fn:printLine` — the line on standard output |
+| the file (`appendLine`, `fileBytes`, `moveFile`, `removeFile`) | `file:write_file/3` `[append]` after `filelib:ensure_dir/1`, `file:read_file_info/1`, `file:rename/2`, `file:delete/1` | `fs.appendFileSync` after `fs.mkdirSync(…, { recursive: true })`, `fs.statSync`, `fs.renameSync`, `fs.unlinkSync` | none — GAP: no binding reaches the file system |
+| the capture (`hostCapture`) | `logger:add_primary_filter(log_runtime_reports, …)`, the previous one removed first | `process.on('uncaughtExceptionMonitor', …)` once, the forward kept on `globalThis.__bp_log.report` | `fn:captureNothing` — answers 0 |
 
 Erlang template variables are spelled `Lg<Name>__`, every template a `fun`
 applied in place.
 
 ## Targets
 
-`targets` is `["erlang", "commonJS"]` and both are tested. Measured from a
-consumer: `botopink run --target beam` runs it too (beam compiles the Erlang
-templates; the digest and a `logError` through a set sink answer as on
-erlang), untested by `botopink test`, which runs no beam. `--target wasm` is
-refused at the first std cell without a wasm binding the package reaches
-(`` `quote` has no `#[@External.<Target>(…)]` for the wasm backend ``, from
-`std/json.bp`), never compiled silently.
+`targets` is `["erlang", "commonJS"]` and both are tested; `botopink test
+--target beam` runs the same suites green (beam compiles the Erlang
+templates). `--target wasm` is refused, never compiled silently: first at
+std — `std/json` (`02/97` step 15, decision 336) and `std/io/clock`
+(`systemTimeWithUnit`, `toCivil`) have no wasm binding the package reaches —
+then at `log`'s own cells with no wasm binding (the sink slot, the four file
+cells; language-gaps.md). `botopink test` runs no wasm.
 
 ## Testing
 
 ```sh
 ../botopink-lang/zig-out/bin/botopink test --target erlang
 ../botopink-lang/zig-out/bin/botopink test --target commonJS
+../botopink-lang/zig-out/bin/botopink test --target beam
 ../botopink-lang/zig-out/bin/botopink format --check src test
 ```
 
@@ -142,7 +207,11 @@ Tests import the package's modules by their path inside the braces
 (`import {formats.renderEcs};`, decision 206). The sink is global host
 state and outlives a test: every test that sets one puts `defaultSink()` back
 before it asserts; `test/logging_test.bp` captures through three test-local
-cells. An epoch reading is built with `clock.parseIso8601` (an `i64` has no
+cells. `test/logfile_test.bp` writes under a fresh directory of the system's
+temporary directory and removes it; `test/reports_test.bp` raises a real
+crash report on the BEAM (a `proc_lib` process that fails) and emits the
+`uncaughtExceptionMonitor` event on node, keeping what the sink got in
+`persistent_term` (the crashing process writes it). An epoch reading is built with `clock.parseIso8601` (an `i64` has no
 literal). Every expected text is a literal; an expected line holding a JSON
 escape is a quoted string, not a `\\` line, because a `\\` line reads `\n` as
 the escape.

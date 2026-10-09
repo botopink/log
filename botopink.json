@@ -2,7 +2,7 @@
   "name": "log",
   "version": "0.0.1",
   "otp": "28",
-  "description": "Levels, the log record, the ECS / GELF / logstash / plain renderers, the one error digest and a Logger over an injected sink — one source for erlang and commonJS",
+  "description": "Levels, the log record, the ECS / GELF / logstash / plain renderers, the one error digest and a Logger over an injected sink, its console, file and fan-out sinks over per-name levels, and the runtime-report capture — one source for every target",
   "src": "src/",
   "entry": "root.bp",
   "target": "erlang",
@@ -13,6 +13,8 @@
     "formats.bp",
     "digest.bp",
     "sink.bp",
-    "logging.bp"
+    "logfile.bp",
+    "logging.bp",
+    "reports.bp"
   ]
 }

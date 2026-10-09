@@ -1,0 +1,92 @@
+//// log — `captureRuntimeReports()` (decision 349): a fault the runtime
+//// reports by itself reaches the sink in force as a `runtime` record. On the
+//// BEAM the fault is a `proc_lib` process that crashes (OTP writes its crash
+//// report); on node the `uncaughtExceptionMonitor` event node emits before
+//// it reports an uncaught exception, emitted here so the test process
+//// survives it.
+
+import {testing.asserts} from "std";
+import {levels.Level, levels.levelName};
+import {formats.LogRecord};
+import {sink.LogSink, sink.setSink, sink.defaultSink};
+import {reports.captureRuntimeReports, reports.writeRuntimeReport};
+
+#[@External.Node("""(function(){ globalThis.__bp_log_reports = []; return 0; })()""")]
+#[@External.Erlang("""(fun() -> persistent_term:put(lg_reports, []), 0 end)()""")]
+declare fn keptReset() -> i32;
+
+// Kept in `persistent_term` on the BEAM: the crash report is written by the
+// crashing process, not the test's.
+#[@External.Node("""(function(__T){ (globalThis.__bp_log_reports ||= []).push(__T); return 1; })($0)""")]
+#[@External.Erlang("""(fun(LgT__) -> persistent_term:put(lg_reports, [LgT__ | persistent_term:get(lg_reports, [])]), 1 end)($0)""")]
+declare fn keep(line: string) -> i32;
+
+#[@External.Node("""((globalThis.__bp_log_reports ||= []).join("\n"))""")]
+#[@External.Erlang("""(fun() -> iolist_to_binary(lists:join(<<"\n">>, lists:reverse(persistent_term:get(lg_reports, [])))) end)()""")]
+declare fn keptLines() -> string;
+
+// A fault the runtime reports: a crashing `proc_lib` process on the BEAM
+// (answered once it is down), the monitor event of an uncaught exception on
+// node.
+#[@External.Node("""(function(){ process.emit('uncaughtExceptionMonitor', new Error('log test fault'), 'uncaughtException'); return 0; })()""")]
+#[@External.Erlang("""(fun() -> LgP__ = proc_lib:spawn(fun() -> erlang:error(log_test_fault) end), LgR__ = erlang:monitor(process, LgP__), receive {'DOWN', LgR__, process, LgP__, _} -> 0 end end)()""")]
+declare fn raiseRuntimeFault() -> i32;
+
+fn fieldOf(r: LogRecord, name: string) -> string {
+    var found = "";
+    for (r.fields) { f ->
+        if (f._0 == name) found = f._1;
+    }
+    return found;
+}
+
+fn keeping() -> LogSink {
+    return LogSink(
+        enabled: { logger, level -> true },
+        write: { r -> keep(levelName(r.level) + " " + r.logger + " " + fieldOf(r, "report.kind") + " " + r.message + " - " + fieldOf(r, "error.stack_trace")) },
+    );
+}
+
+test "reports: a runtime report is a `runtime` record with its kind" {
+    val _r = keptReset();
+    val _s = setSink(keeping());
+    val w = writeRuntimeReport(
+        "warn",
+        "supervisor_report",
+        "child restarted",
+        "",
+    );
+    val x = writeRuntimeReport(
+        "error",
+        "uncaughtException",
+        "Error: boom",
+        "Error: boom\n    at f",
+    );
+    val lines = keptLines();
+    val _d = setSink(defaultSink());
+    try asserts.equals(w, 1);
+    try asserts.equals(x, 1);
+    try asserts.equals(
+        lines,
+        "warn runtime supervisor_report child restarted - \nerror runtime uncaughtException Error: boom - Error: boom\n    at f",
+    );
+}
+
+test "reports: a fault the runtime reports reaches the sink in force" {
+    val _r = keptReset();
+    val _s = setSink(keeping());
+    val first = captureRuntimeReports();
+    val again = captureRuntimeReports();
+    val _f = raiseRuntimeFault();
+    val lines = keptLines();
+    val _d = setSink(defaultSink());
+    try asserts.equals(first, 0);
+    try asserts.equals(again, 0);
+    val beam = lines.startsWith("error runtime crash_report ")
+        && lines.contains("log_test_fault")
+        && lines.contains("\n") == false;
+    val node = lines.startsWith(
+        "error runtime uncaughtException Error: log test fault - Error: log test fault\n",
+    );
+    try asserts.isTrue(beam || node);
+}

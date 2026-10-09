@@ -1,0 +1,119 @@
+//// log — the sinks it ships (decision 349): `consoleSink` over per-name
+//// levels, `fanOut` over several sinks, and their refusals. A console line
+//// goes to standard output, which a test does not read back: the line is
+//// `renderRecord`'s (pinned by `formats_test.bp`), the test pins which
+//// records reach it.
+
+import {testing.asserts} from "std";
+import {levels.Level, levels.levelName, levels.Threshold, levels.Levels};
+import {formats.Format};
+import {sink.LogSink, sink.setSink, sink.defaultSink, sink.consoleSink, sink.fanOut};
+import {logging.Logger};
+
+#[@External.Node("""(function(){ globalThis.__bp_log_sinks = []; return 0; })()""")]
+#[@External.Erlang("""(fun() -> put(lg_sinks, []), 0 end)()""")]
+declare fn heardReset() -> i32;
+
+#[@External.Node("""(function(__T){ (globalThis.__bp_log_sinks ||= []).push(__T); return 1; })($0)""")]
+#[@External.Erlang("""(fun(LgT__) -> put(lg_sinks, [LgT__ | case get(lg_sinks) of undefined -> []; LgL__ -> LgL__ end]), 1 end)($0)""")]
+declare fn heard(line: string) -> i32;
+
+#[@External.Node("""((globalThis.__bp_log_sinks ||= []).join(" | "))""")]
+#[@External.Erlang("""(fun() -> iolist_to_binary(lists:join(<<" | ">>, lists:reverse(case get(lg_sinks) of undefined -> []; LgL__ -> LgL__ end))) end)()""")]
+declare fn heardLines() -> string;
+
+fn on(level: Level) -> Threshold {
+    return Threshold.From(level: level);
+}
+
+fn noNames() -> Array<#(string, Threshold)> {
+    val none: Array<#(string, Threshold)> = [];
+    return none;
+}
+
+// A sink taking what `levels` admits, each record heard as `<tag>:<level>:<message>`.
+fn tagged(tag: string, levels: Levels) -> LogSink {
+    val inner = consoleSink(Format.Plain, levels).unwrapOr(defaultSink());
+    return LogSink(
+        enabled: inner.enabled,
+        write: { r -> heard(tag + ":" + levelName(r.level) + ":" + r.message) },
+    );
+}
+
+fn refusal(r: @Result<LogSink, string>) -> string {
+    return case r {
+        Ok(_) -> "";
+        Error(reason) -> reason;
+    };
+}
+
+test "sinks: consoleSink takes what its levels admit and writes a line" {
+    val levels = Levels(
+        root: on(Level.Warn),
+        names: [
+            #("app.sql", on(Level.Debug)),
+            #("app.sql.pool", Threshold.Off),
+        ],
+    );
+    val sink = try consoleSink(Format.Plain, levels);
+    val enabled = sink.enabled;
+    try asserts.isFalse(enabled("app", Level.Info));
+    try asserts.isTrue(enabled("app", Level.Warn));
+    try asserts.isTrue(enabled("app.sql.query", Level.Debug));
+    try asserts.isFalse(enabled("app.sql.query", Level.Trace));
+    try asserts.isFalse(enabled("app.sql.pool", Level.Error));
+    val _s = setSink(sink);
+    val written = Logger(name: "app.sql").debug("select 1");
+    val dropped = Logger(name: "app.sql.pool").error("not written");
+    val _d = setSink(defaultSink());
+    try asserts.equals(written, 0);
+    try asserts.equals(dropped, 0);
+}
+
+test "sinks: consoleSink refuses levels it cannot resolve" {
+    try asserts.equals(
+        refusal(
+            consoleSink(
+                Format.Ecs,
+                Levels(
+                    root: on(Level.Info),
+                    names: [#("a", on(Level.Info)), #("a", Threshold.Off)],
+                ),
+            ),
+        ),
+        "log.consoleSink: log.Levels: the logger name \"a\" is set twice",
+    );
+}
+
+test "sinks: fanOut hands a record to every sink that takes it, in order" {
+    val _r = heardReset();
+    val all = tagged("all", Levels(root: on(Level.Trace), names: noNames()));
+    val errors = tagged(
+        "errors",
+        Levels(root: on(Level.Error), names: [#("app.audit", on(Level.Info))]),
+    );
+    val _s = setSink(fanOut([all, errors]));
+    val log = Logger(name: "app");
+    val a = log.debug("one");
+    val b = log.error("two");
+    val c = Logger(name: "app.audit").info("three");
+    val lines = heardLines();
+    val wants = fanOut([errors]).enabled;
+    val _d = setSink(defaultSink());
+    try asserts.equals(a, 1);
+    try asserts.equals(b, 2);
+    try asserts.equals(c, 2);
+    try asserts.equals(
+        lines,
+        "all:debug:one | all:error:two | errors:error:two | all:info:three | errors:info:three",
+    );
+    try asserts.isFalse(wants("app", Level.Warn));
+    try asserts.isTrue(wants("app.audit.trail", Level.Info));
+}
+
+test "sinks: fanOut over no sink takes nothing" {
+    val none: Array<LogSink> = [];
+    val sink = fanOut(none);
+    val enabled = sink.enabled;
+    try asserts.isFalse(enabled("app", Level.Error));
+}

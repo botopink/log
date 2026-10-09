@@ -1,0 +1,155 @@
+//// log — the file sink (decision 349): the line appended, the rotation
+//// (`<path>.0` the newest archive, the oldest deleted, `maxFiles` 0
+//// truncating), and the refusals. Each test writes under a directory of its
+//// own in the system's temporary directory and removes it.
+
+import {testing.asserts} from "std";
+import {io.fs} from "std";
+import {levels.Level, levels.Threshold, levels.Levels};
+import {formats.Format};
+import {sink.LogSink, sink.setSink, sink.defaultSink};
+import {logfile.LogFile, logfile.fileSink, logfile.archiveName, logfile.logFileBytes, logfile.appendRotating, logfile.rotate};
+import {logging.Logger};
+
+#[@External.Node("""require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'bp-log-'))""")]
+#[@External.Erlang("""(fun() -> LgT__ = case os:getenv("TMPDIR") of false -> "/tmp"; LgV__ -> LgV__ end, LgD__ = filename:join(LgT__, "bp-log-" ++ integer_to_list(erlang:unique_integer([positive]))), ok = file:make_dir(LgD__), unicode:characters_to_binary(LgD__) end)()""")]
+declare fn freshDir() -> string;
+
+fn text(path: string) -> string {
+    return fs.readText(path).unwrapOr("<none>");
+}
+
+fn everyName() -> Array<#(string, Threshold)> {
+    val none: Array<#(string, Threshold)> = [];
+    return none;
+}
+
+fn infoAndUp() -> Levels {
+    return Levels(root: Threshold.From(level: Level.Info), names: everyName());
+}
+
+fn refusal(r: @Result<LogSink, string>) -> string {
+    return case r {
+        Ok(_) -> "";
+        Error(reason) -> reason;
+    };
+}
+
+test "logfile: a file sink appends one line per record it takes" {
+    val dir = freshDir();
+    val path = dir + "/nested/app.log";
+    val sink = try fileSink(
+        LogFile(path: path, maxBytes: 1048576l, maxFiles: 3),
+        Format.Plain,
+        Levels(
+            root: Threshold.From(level: Level.Info),
+            names: [#("app.noisy", Threshold.Off)],
+        ),
+    );
+    val _s = setSink(sink);
+    val a = Logger(name: "app").info("first");
+    val b = Logger(name: "app").debug("dropped");
+    val c = Logger(name: "app.noisy").error("dropped too");
+    val d = Logger(name: "app").warn("second");
+    val _d = setSink(defaultSink());
+    val lines: string[] = text(path).split("\n");
+    val _x = fs.removeTree(dir);
+    try asserts.equals(a, 0);
+    try asserts.equals(b, 0);
+    try asserts.equals(c, 0);
+    try asserts.equals(d, 0);
+    try asserts.equals(lines.length, 3);
+    try asserts.isTrue((lines.at(0) ?? "").contains(" INFO "));
+    try asserts.isTrue((lines.at(0) ?? "").endsWith("app : first"));
+    try asserts.isTrue((lines.at(1) ?? "").endsWith("app : second"));
+    try asserts.equals(lines.at(2) ?? "<none>", "");
+}
+
+test "logfile: a write that reaches maxBytes rotates, the oldest archive goes" {
+    val dir = freshDir();
+    val path = dir + "/r.log";
+    val file = LogFile(path: path, maxBytes: 10l, maxFiles: 2);
+    val _1 = appendRotating(file, "aaaa");
+    val sizeOne = logFileBytes(path);
+    val _2 = appendRotating(file, "bbbb");
+    val liveAfterTwo = fs.exists(path);
+    val firstArchive = text(archiveName(path, 0));
+    val _3 = appendRotating(file, "cccccccccc");
+    val _4 = appendRotating(file, "dd");
+    val liveAfterFour = text(path);
+    val _5 = appendRotating(file, "eeeeeeeee");
+    val live = fs.exists(path);
+    val newest = text(archiveName(path, 0));
+    val older = text(archiveName(path, 1));
+    val third = fs.exists(archiveName(path, 2));
+    val _x = fs.removeTree(dir);
+    try asserts.isTrue(sizeOne == 5l);
+    try asserts.isFalse(liveAfterTwo);
+    try asserts.equals(firstArchive, "aaaa\nbbbb\n");
+    try asserts.equals(liveAfterFour, "dd\n");
+    try asserts.isFalse(live);
+    try asserts.equals(newest, "dd\neeeeeeeee\n");
+    try asserts.equals(older, "cccccccccc\n");
+    try asserts.isFalse(third);
+}
+
+test "logfile: with no archive kept, a full file is deleted and starts again" {
+    val dir = freshDir();
+    val path = dir + "/z.log";
+    val file = LogFile(path: path, maxBytes: 5l, maxFiles: 0);
+    val _1 = appendRotating(file, "abc");
+    val before = text(path);
+    val _2 = appendRotating(file, "x");
+    val after = fs.exists(path);
+    val archived = fs.exists(archiveName(path, 0));
+    val _3 = rotate(file);
+    val bytes = logFileBytes(path);
+    val _x = fs.removeTree(dir);
+    try asserts.equals(before, "abc\n");
+    try asserts.isFalse(after);
+    try asserts.isFalse(archived);
+    try asserts.isTrue(bytes == -1l);
+}
+
+test "logfile: fileSink refuses a file or levels it cannot use" {
+    try asserts.equals(
+        refusal(
+            fileSink(
+                LogFile(path: "", maxBytes: 10l, maxFiles: 1),
+                Format.Plain,
+                infoAndUp(),
+            ),
+        ),
+        "log.fileSink: log.LogFile: the path is empty",
+    );
+    try asserts.equals(
+        refusal(
+            fileSink(
+                LogFile(path: "a.log", maxBytes: 0l, maxFiles: 1),
+                Format.Plain,
+                infoAndUp(),
+            ),
+        ),
+        "log.fileSink: log.LogFile: maxBytes is 0, and a file rotates at a size of at least 1 byte",
+    );
+    try asserts.equals(
+        refusal(
+            fileSink(
+                LogFile(path: "a.log", maxBytes: 10l, maxFiles: -1),
+                Format.Plain,
+                infoAndUp(),
+            ),
+        ),
+        "log.fileSink: log.LogFile: maxFiles is -1, and the archives kept are 0 or more",
+    );
+    try asserts.equals(
+        refusal(
+            fileSink(
+                LogFile(path: "a.log", maxBytes: 10l, maxFiles: 1),
+                Format.Plain,
+                Levels(root: Threshold.Off, names: [#("x.", Threshold.Off)]),
+            ),
+        ),
+        "log.fileSink: log.Levels: the logger name \"x.\" has an empty segment",
+    );
+}
