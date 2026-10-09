@@ -1,9 +1,8 @@
-# libs/log/
+# log
 
-> Path: `libs/log/`
-> Parent: [`../AGENTS.md`](../AGENTS.md)
+> Repository: `botopink/log` (`git@github.com:botopink/log.git`) · in the meta checkout: `repository/log/`
 
-The bundled `log` library (decisions 194 and 195): the five levels, the log
+The `log` library (decisions 194 and 195): the five levels, the log
 record, the ECS / GELF / logstash / plain renderers, the one error digest, and
 a `Logger` whose sink is injected. One source compiled for erlang and
 commonJS, so a record renders the same line and a fault the same digest on
@@ -15,9 +14,14 @@ Imports `std` and nothing else (`json`, `hash`, `io.clock`, `io.os`,
 `io.process`). Ships `.bp` files only — target-native code is three inline
 `#[@External.<Target>(…)]` templates in `sink.bp` (decision 117 rule 8).
 
-**Bundled.** `build.zig`'s `bundled_packages` names it: any program's
-`from "log"` loads the copy embedded in the compiler (as `log/<module>`), with
-no `dependencies` entry; listing `log` in `dependencies` is refused. Both the
+**A library of its own** (decision 326). It was bundled with the compiler until
+`03-bundled-libs/138` moved it here with its history; the compiler now embeds std alone.
+A program that imports `from "log"` declares it in `dependencies` (decision 242) —
+`{ "log": { "git": "https://github.com/botopink/log.git", "branch": "feat" } }`; inside the meta checkout that entry
+resolves by name through the `repository/` root (`repository/log`), elsewhere
+through the install store. Without the entry, `from "log"` is
+`unresolved import source "log" — declare it in botopink.json "dependencies"`.
+Both the
 leaf form decision 195 writes, `import {errorDigest, Logger} from "log";`, and
 the module-qualified form, `import {logging.Logger, digest.errorDigest} from
 "log";`, resolve — measured from a scratch consumer on commonJS and erlang.
@@ -25,7 +29,7 @@ the module-qualified form, `import {logging.Logger, digest.errorDigest} from
 ## Tree
 
 ```text
-libs/log/
+log/
 ├── botopink.json     "name": "log", "target": "erlang", "targets": ["erlang", "commonJS"], no dependencies
 ├── AGENTS.md         ← you are here
 ├── src/
@@ -129,9 +133,9 @@ refused at the first std cell without a wasm binding the package reaches
 ## Testing
 
 ```sh
-../../zig-out/bin/botopink test --target erlang
-../../zig-out/bin/botopink test --target commonJS
-../../zig-out/bin/botopink format --check src test
+../botopink-lang/zig-out/bin/botopink test --target erlang
+../botopink-lang/zig-out/bin/botopink test --target commonJS
+../botopink-lang/zig-out/bin/botopink format --check src test
 ```
 
 Tests import the package's modules by their path inside the braces
@@ -142,3 +146,24 @@ cells. An epoch reading is built with `clock.parseIso8601` (an `i64` has no
 literal). Every expected text is a literal; an expected line holding a JSON
 escape is a quoted string, not a `\\` line, because a `\\` line reads `\n` as
 the escape.
+
+## Local gate
+
+`scripts/git-hooks/pre-commit` is the tracked pre-commit gate, self-contained:
+it sources `scripts/git-hooks/lib/runner-standalone.sh` from this repository and
+reaches nothing outside it, so a standalone clone, a checkout inside the botopink
+meta workspace and a worktree run the same gate. Install it once per clone:
+
+```sh
+git config core.hooksPath scripts/git-hooks
+```
+
+The repository is one plain package, so the gate's test stage runs
+`botopink test --target <t>` at the root on each target `botopink.json` declares
+(`erlang`, `commonJS`). Never commit with `--no-verify`; fix the red instead.
+`scripts/git-hooks/pre-commit` and `scripts/git-hooks/lib/runner-standalone.sh`
+are one text across every library repository: the meta repository's
+`hook-integrity` workflow compares the bytes (its check 4), so a change to either
+lands in all of them together. CI: `.github/workflows/test.yml` runs the same
+package on linux and macos, on each declared target, with the compiler built from
+`botopink/botopink-lang` `feat`.
