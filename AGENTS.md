@@ -1,5 +1,7 @@
 # log
 
+`decisions-taken.md` is generated — from the meta repository's `specs/<milestone>/decisions-taken.md` by `scripts/decisions-split.py`; edit it there, never here.
+
 > Repository: `botopink/log` (`git@github.com:botopink/log.git`) · in the meta checkout: `repository/log/`
 
 The `log` library (decisions 194, 195 and 349): the five levels and per-name
