@@ -244,5 +244,5 @@ The repository is one plain package, so the gate's test stage runs
 are one text across every library repository: the meta repository's
 `hook-integrity` workflow compares the bytes (its check 4), so a change to either
 lands in all of them together. CI: `.github/workflows/test.yml` runs the same
-package on linux and macos, on each declared target, with the compiler built from
+package on linux (ubuntu-24.04; no macos row), on each declared target, with the compiler built from
 `botopink/botopink-lang` `feat`.
