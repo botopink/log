@@ -37,7 +37,7 @@ pub type LogSink(
 
 #[@External.Node("""(function(__L, __T){ (__L === "error" ? console.error : __L === "warning" ? console.warn : console.log)(__T); return 0; })($0, $1)""")]
 #[@External.Erlang("""(fun(LgL__, LgT__) -> logger:log(binary_to_existing_atom(LgL__, utf8), "~ts", [LgT__]), 0 end)($0, $1)""")]
-#[@External.Wasm("fn:printLine")]
+#[@External.Wasm(fn: printLine)]
 declare fn hostWrite(otpLevel: string, line: string) -> i32;
 
 // wasm's host write: the line on standard output, whatever the level — the
