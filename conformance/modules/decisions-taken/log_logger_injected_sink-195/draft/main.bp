@@ -1,3 +1,48 @@
 //// Decision 195 — `log` — `import {errorDigest, Logger} from "log";` — levels, `LogRecord`, four renderers, `errorDigest` and a `Logger` w
 
-pub fn main() -> void {}
+import {io.terminal} from "std";
+import {errorDigest} from "log/digest";
+import {Logger} from "log/logging";
+import {levels.Level, levels.levelName, levels.levelRank} from "log";
+import {formats.LogRecord} from "log";
+import {sink.LogSink, sink.setSink, sink.defaultSink} from "log";
+
+// The record a sink receives, on one line with no clock or host in it.
+fn describe(r: LogRecord) -> string {
+    var parts: string[] = [levelName(r.level), r.logger, r.message];
+    if (r.digest != "") parts.push("digest=" + r.digest);
+    for (r.fields) { f ->
+        parts.push(f._0 + "=" + f._1);
+    }
+    return parts.join(" ");
+}
+
+// The program's own sink: debug and above, each record printed. Its write
+// answers 1, and the logger answers what the write answered.
+fn printing() -> LogSink {
+    return LogSink(
+        enabled: { logger, level -> levelRank(level) >= 1 },
+        write: { r ->
+            terminal.print(describe(r), "\n");
+            1
+        },
+    );
+}
+
+pub fn main() -> void {
+    val _s = setSink(printing());
+    val log = Logger(name: "app.billing");
+    val dropped = log.trace("never rendered");
+    val kept = log.infoWith("charging", [#("invoice.id", "7")]);
+    terminal.print(dropped, " ", kept, "\n");
+    terminal.print(log.isEnabled(Level.Trace), " ", log.isEnabled(Level.Debug), "\n");
+    val built = log.lazily(Level.Trace, { -> "never built" });
+    terminal.print(built, "\n");
+
+    val digest = log.logError("app/billing", "badarith", "division by zero", "billing.bp:12 charge.bp:4", []);
+    terminal.print(digest
+        == errorDigest("app/billing", "badarith", "division by zero", "billing.bp:12 charge.bp:4"), "\n");
+
+    // Back to the sink in force when none is set: the host's logger.
+    val _d = setSink(defaultSink());
+}

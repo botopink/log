@@ -1,3 +1,62 @@
 //// Decision 194 — One error-digest scheme with one implementation: the first 16 hex of `strongHash` over `module|errorClass|message|top
 
-pub fn main() -> void {}
+import {io.terminal} from "std";
+import {digest.errorDigest, digest.topFramesOf, digest.clientErrorBody} from "log";
+import {formats.LogRecord} from "log";
+import {sink.LogSink, sink.setSink, sink.defaultSink} from "log";
+import {logging.Logger} from "log";
+
+// A sink that prints the digest and the fields of each record it takes.
+fn printing() -> LogSink {
+    return LogSink(
+        enabled: { logger, level -> true },
+        write: { r ->
+            var parts: string[] = [r.message, "digest=" + r.digest];
+            for (r.fields) { f ->
+                parts.push(f._0 + "=" + f._1);
+            }
+            terminal.print(parts.join(" "), "\n");
+            1
+        },
+    );
+}
+
+pub fn main() -> void {
+    val module = "app/invoices/[id]/page";
+    // One fault, hit twice: other line numbers, other whitespace, a fourth frame.
+    val first = errorDigest(
+        module,
+        "badarg",
+        "invoice total is negative",
+        "invoice.bp:42 render.bp:7 page.bp:3 router.bp:9",
+    );
+    val again = errorDigest(
+        module,
+        "badarg",
+        "invoice total is negative",
+        "invoice.bp:44\trender.bp:8\npage.bp:3 server.bp:120",
+    );
+    // Another fault: the message differs.
+    val other = errorDigest(
+        module,
+        "badarg",
+        "invoice has no lines",
+        "invoice.bp:42 render.bp:7 page.bp:3",
+    );
+    terminal.print(topFramesOf("invoice.bp:42 render.bp:7 page.bp:3 router.bp:9"), "\n");
+    terminal.print(first, " ", first.length(), "\n");
+    terminal.print(first == again, " ", first == other, "\n");
+
+    // The one call that logs the fault answers the digest the fallback shows.
+    val _s = setSink(printing());
+    val shown = Logger(name: "app.invoices").logError(
+        module,
+        "badarg",
+        "invoice total is negative",
+        "invoice.bp:42 render.bp:7 page.bp:3",
+        [#("invoice.id", "7")],
+    );
+    val _d = setSink(defaultSink());
+    terminal.print(shown == first, "\n");
+    terminal.print(clientErrorBody(shown), "\n");
+}

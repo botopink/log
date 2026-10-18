@@ -1,0 +1,9 @@
+{
+  "name": "conformance",
+  "version": "0.0.1",
+  "workspaces": ["*"],
+  "targets": ["erlang", "commonJS"],
+  "dependencies": {
+    "log": { "path": "../.." }
+  }
+}

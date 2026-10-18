@@ -1,3 +1,11 @@
 //// Decision 206 — `import {…} from "<name>"` resolves only to a package — std, a bundled package or a declared dependency.
 
-pub fn main() -> void {}
+import {io.terminal} from "std";
+import {digest.errorDigest, digest.clientErrorBody} from "log";
+import {log.describeFault};
+
+pub fn main() -> void {
+    val digest = errorDigest("app/blog/[slug]/page", "error", "no post", "blog_page:render/1:42");
+    terminal.print(clientErrorBody(digest), "\n");
+    terminal.print(describeFault(digest), "\n");
+}

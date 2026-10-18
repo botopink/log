@@ -1,0 +1,7 @@
+//// A module of this package that happens to be named `log`, like the dependency.
+
+import {digest.topFramesOf} from "log";
+
+pub fn describeFault(digest: string) -> string {
+    return ["fault ", digest, " at ", topFramesOf("blog_page:render/1:42 blog_page:load/1:9")].join("");
+}

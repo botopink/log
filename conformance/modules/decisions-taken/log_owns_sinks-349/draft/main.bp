@@ -1,3 +1,73 @@
 //// Decision 349 — `log` owns the sinks; rakun and onze only integrate.
 
-pub fn main() -> void {}
+import {io.terminal, io.os, io.fs} from "std";
+import {levels.Level, levels.Threshold, levels.Levels} from "log";
+import {formats.Format} from "log";
+import {sink.LogSink, sink.consoleSink, sink.fanOut, sink.setSink, sink.defaultSink} from "log";
+import {logfile.LogFile, logfile.fileSink, logfile.logFileBytes} from "log";
+import {reports.captureRuntimeReports} from "log";
+import {logging.Logger} from "log";
+
+// A framework's whole part at boot: choose the sinks, configure them, and
+// hand the one it built to `log` — errors on the console, the file under
+// the per-name levels.
+fn boot(levels: Levels, path: string) -> Result<LogSink, string> {
+    val console = try consoleSink(
+        Format.Plain,
+        Levels(root: Threshold.From(level: Level.Error), names: []),
+    );
+    val file = try fileSink(
+        LogFile(path: path, maxBytes: 1048576l, maxFiles: 2),
+        Format.Ecs,
+        levels,
+    );
+    return fanOut([console, file]);
+}
+
+pub fn main() -> void {
+    // Per-name levels: info for every logger, `db` silent, `http.access` from warn.
+    val levels = Levels(
+        root: Threshold.From(level: Level.Info),
+        names: [
+            #("db", Threshold.Off),
+            #("http.access", Threshold.From(level: Level.Warn)),
+        ],
+    );
+    val dir = [os.tmpdir(), "/log-decision-349"].join("");
+    val path = [dir, "/app.log"].join("");
+    val sink = try boot(levels, path) catch { e ->
+        terminal.print(e, "\n");
+        defaultSink()
+    };
+    val takes = sink.enabled;
+    terminal.print(
+        takes("db.pool", Level.Error),
+        " ",
+        takes("http.access", Level.Info),
+        " ",
+        takes("http.access", Level.Warn),
+        " ",
+        takes("app", Level.Info),
+        "\n",
+    );
+
+    val _s = setSink(sink);
+    val _c = captureRuntimeReports();
+    val _q = Logger(name: "db").info("never written");
+    terminal.print(logFileBytes(path), "\n");
+    val _w = Logger(name: "http.access").warn("slow request");
+    terminal.print(logFileBytes(path) > 0l, "\n");
+
+    // A levels value the file sink cannot resolve is refused by it.
+    val twice = Levels(
+        root: Threshold.Off,
+        names: [#("db", Threshold.Off), #("db", Threshold.Off)],
+    );
+    val refused = try boot(twice, path) catch { e ->
+        terminal.print(e, "\n");
+        defaultSink()
+    };
+
+    val _d = setSink(defaultSink());
+    val _r = fs.removeTree(dir);
+}

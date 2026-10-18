@@ -1,0 +1,7 @@
+//// A module of this package: its `pub` name is reached by its path, `import {naming.loggerName};`.
+
+import {levels.levelName, levels.Level} from "log";
+
+pub fn loggerName(area: string) -> string {
+    return ["app.", area, " from ", levelName(Level.Info)].join("");
+}

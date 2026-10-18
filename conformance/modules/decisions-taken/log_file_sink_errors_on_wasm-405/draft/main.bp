@@ -1,3 +1,28 @@
 //// Decision 405 — For now, `log.fileSink` is one API on every target and answers a named `Error` on wasm — on both hosts.
 
-pub fn main() -> void {}
+import {io.terminal} from "std";
+import {levels.Level, levels.Threshold, levels.Levels} from "log";
+import {formats.Format} from "log";
+import {sink.consoleSink, sink.setSink, sink.defaultSink} from "log";
+import {logfile.LogFile, logfile.fileSink} from "log";
+import {logging.Logger} from "log";
+
+pub fn main() -> void {
+    val levels = Levels(root: Threshold.From(level: Level.Info), names: []);
+
+    // On wasm the one call that cannot be served answers its named error,
+    // and the program falls back to the console.
+    val sink = try fileSink(
+        LogFile(path: "app.log", maxBytes: 10485760l, maxFiles: 7),
+        Format.Ecs,
+        levels,
+    ) catch { e ->
+        terminal.print(e, "\n");
+        consoleSink(Format.Plain, levels).unwrapOr(defaultSink())
+    };
+
+    // The console sink works there: the record reaches standard output.
+    val _s = setSink(sink);
+    val _w = Logger(name: "app").info("started without a file");
+    val _d = setSink(defaultSink());
+}

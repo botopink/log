@@ -1,3 +1,10 @@
 //// Decision 337 — The shorthand import goes; `mod m;` binds the namespace `m` in the module that declares it.
 
-pub fn main() -> void {}
+import {io.terminal} from "std";
+import {errorDigest};
+import {loggerName};
+
+pub fn main() -> void {
+    terminal.print(errorDigest("app", "error", "boom", "app.bp:1"), "\n");
+    terminal.print(loggerName("billing"), "\n");
+}

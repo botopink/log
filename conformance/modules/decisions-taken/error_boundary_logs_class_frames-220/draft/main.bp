@@ -1,3 +1,65 @@
 //// Decision 220 — The runtime hands the error boundary the caught error's class and frames (erlang: `Class` and the stacktrace; node: `err
 
-pub fn main() -> void {}
+import {io.terminal} from "std";
+import {levels.levelName} from "log";
+import {formats.LogRecord} from "log";
+import {sink.LogSink, sink.setSink, sink.defaultSink} from "log";
+import {digest.errorDigest} from "log";
+import {logging.Logger} from "log";
+
+// What the runtime hands the boundary for a caught error: the class and the
+// frames — erlang's `Class` and stacktrace, node's `err.name` and `err.stack`.
+type Caught(errorClass: string, message: string, frames: string)
+
+// The error boundary of one route segment: one error record, the digest back.
+fn boundary(route: string, caught: Caught) -> string {
+    return Logger(name: "jhonstart.boundary").logError(
+        route,
+        caught.errorClass,
+        caught.message,
+        caught.frames,
+        [#("http.status", "500")],
+    );
+}
+
+fn describe(r: LogRecord) -> string {
+    var parts: string[] = [levelName(r.level), r.logger, r.message, "digest="
+        + r.digest];
+    for (r.fields) { f ->
+        parts.push(f._0 + "=" + f._1);
+    }
+    return parts.join(" ");
+}
+
+pub fn main() -> void {
+    val _s = setSink(LogSink(
+        enabled: { logger, level -> true },
+        write: { r ->
+            terminal.print(describe(r), "\n");
+            1
+        },
+    ));
+    val route = "app/blog/[slug]/page";
+    val onErlang = Caught(
+        errorClass: "error",
+        message: "no post with this slug",
+        frames: "blog_page:render/1:42 jhonstart_render:page/2:117 jhonstart_router:serve/3:88 cowboy_handler:execute/2:37",
+    );
+    val first = boundary(route, onErlang);
+    // The same fault hit again: other line numbers, the digest the same.
+    val again = boundary(route, Caught(
+        errorClass: "error",
+        message: "no post with this slug",
+        frames: "blog_page:render/1:45 jhonstart_render:page/2:120 jhonstart_router:serve/3:90",
+    ));
+    terminal.print(first == again, " ", first
+        == errorDigest(route, "error", "no post with this slug", "blog_page:render/1 jhonstart_render:page/2 jhonstart_router:serve/3"), "\n");
+
+    val onNode = Caught(
+        errorClass: "TypeError",
+        message: "Cannot read properties of undefined (reading 'title')",
+        frames: "at render (app/blog/[slug]/page.js:12:7)\n    at renderPage (jhonstart/render.js:301:15)",
+    );
+    terminal.print(boundary(route, onNode).length(), "\n");
+    val _d = setSink(defaultSink());
+}

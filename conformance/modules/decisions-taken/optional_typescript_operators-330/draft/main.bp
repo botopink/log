@@ -1,3 +1,38 @@
 //// Decision 330 — `?T` is read with TypeScript's operators and has no methods; `result` goes; a type declared in a type is its associated type.
 
-pub fn main() -> void {}
+import {io.terminal, io.env} from "std";
+import {levels.Level, levels.Threshold, levels.Levels, levels.parseThreshold, levels.thresholdAdmits} from "log";
+
+// The threshold set on exactly `logger`, `null` when the name has none.
+fn setOn(levels: Levels, logger: string) -> ?Threshold {
+    var found: ?Threshold = null;
+    for (levels.names) { entry ->
+        if (entry._0 == logger) found = entry._1;
+    }
+    return found;
+}
+
+pub fn main() -> void {
+    // `??` is the whole fallback: the variable, else `info`.
+    val raw = env.read("BOTOPINK_LOG_LEVEL_NOT_SET") ?? "info";
+    terminal.print(raw, "\n");
+
+    val levels = Levels(
+        root: Threshold.From(level: Level.Info),
+        names: [#("db", Threshold.Off)],
+    );
+    val db = setOn(levels, "db");
+    val app = setOn(levels, "app");
+    terminal.print(thresholdAdmits(db ?? levels.root, Level.Error), " ", thresholdAdmits(app ?? levels.root, Level.Error), "\n");
+    terminal.print(thresholdAdmits(db!, Level.Info), "\n");
+
+    // The first name set, read through `?.`: `?string`, never `??string`.
+    val first = levels.names.at(0)?._0 ?? "(root only)";
+    val none: Array<#(string, Threshold)> = [];
+    val missing = none.at(0)?._0 ?? "(root only)";
+    terminal.print(first, " ", missing, "\n");
+
+    // A `Result` keeps its methods; `?T` has none.
+    val parsed = parseThreshold("loud");
+    terminal.print(parsed.isError(), " ", thresholdAdmits(parsed.unwrapOr(Threshold.Off), Level.Error), "\n");
+}

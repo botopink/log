@@ -1,3 +1,38 @@
 //// Decision 594 — Every library runs at build on the wasm comptime runtime (434), jhonstart first; a function only Erlang or Node can run is a located error there.
 
-pub fn main() -> void {}
+import {io.terminal} from "std";
+import {levels.Level, levels.levelName, levels.otpLevel} from "log";
+import {formats.Format, formats.formatName} from "log";
+import {digest.errorDigest, digest.topFramesOf, digest.clientErrorBody} from "log";
+
+pub fn main() -> void {
+    // Each call runs at build on the wasm comptime runtime, whatever the target.
+    val frames = comptime topFramesOf("invoice.bp:42 render.bp:7 page.bp:3 router.bp:9");
+    val digest = comptime errorDigest(
+        "app/invoices/[id]/page",
+        "badarg",
+        "invoice total is negative",
+        "invoice.bp:42 render.bp:7 page.bp:3",
+    );
+    val body = comptime clientErrorBody(
+        errorDigest(
+            "app/invoices/[id]/page",
+            "badarg",
+            "invoice total is negative",
+            "invoice.bp:42 render.bp:7 page.bp:3",
+        ),
+    );
+    val level = comptime levelName(Level.Warn);
+    val otp = comptime otpLevel(Level.Warn);
+    val format = comptime formatName(Format.Logstash);
+    terminal.print(frames, "\n", body, "\n", level, " ", otp, " ", format, "\n");
+
+    // The same calls at run time answer the same strings.
+    terminal.print(digest
+        == errorDigest(
+            "app/invoices/[id]/page",
+            "badarg",
+            "invoice total is negative",
+            "invoice.bp:42 render.bp:7 page.bp:3",
+        ), "\n");
+}
