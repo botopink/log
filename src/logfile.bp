@@ -22,6 +22,7 @@
 import {levels.Levels, levels.levelEnabled, levels.levelsProblem};
 import {formats.Format, formats.renderRecord};
 import {sink.LogSink};
+import {compiler} from "std";
 
 // The file a `fileSink` writes: its path, the size that rotates it, and the
 // archives kept.
@@ -32,20 +33,16 @@ pub type LogFile(
 )
 
 // LANGUAGE GAP: wasm has no binding that reaches the file system — the four file cells are refused on wasm.
-#[@External.Node("""(function(__P, __L){ var __fs = require('fs'); __fs.mkdirSync(require('path').dirname(__P), { recursive: true }); __fs.appendFileSync(__P, __L + "\n"); return 0; })($0, $1)""")]
-#[@External.Erlang("""(fun(LgP__, LgL__) -> ok = filelib:ensure_dir(LgP__), ok = file:write_file(LgP__, [LgL__, <<"\n">>], [append]), 0 end)($0, $1)""")]
+#[compiler.external(.JavaScript("""(function(__P, __L){ var __fs = require('fs'); __fs.mkdirSync(require('path').dirname(__P), { recursive: true }); __fs.appendFileSync(__P, __L + "\n"); return 0; })($0, $1)"""), .Erlang("""(fun(LgP__, LgL__) -> ok = filelib:ensure_dir(LgP__), ok = file:write_file(LgP__, [LgL__, <<"\n">>], [append]), 0 end)($0, $1)"""))]
 declare fn appendLine(path: string, line: string) -> i32;
 
-#[@External.Node("""(function(__P){ var __fs = require('fs'); return __fs.existsSync(__P) ? __fs.statSync(__P).size : -1; })($0)""")]
-#[@External.Erlang("""(fun(LgP__) -> case file:read_file_info(LgP__) of {ok, LgI__} -> element(2, LgI__); {error, enoent} -> -1 end end)($0)""")]
+#[compiler.external(.JavaScript("""(function(__P){ var __fs = require('fs'); return __fs.existsSync(__P) ? __fs.statSync(__P).size : -1; })($0)"""), .Erlang("""(fun(LgP__) -> case file:read_file_info(LgP__) of {ok, LgI__} -> element(2, LgI__); {error, enoent} -> -1 end end)($0)"""))]
 declare fn fileBytes(path: string) -> i64;
 
-#[@External.Node("""(function(__F, __T){ var __fs = require('fs'); if (__fs.existsSync(__F)) __fs.renameSync(__F, __T); return 0; })($0, $1)""")]
-#[@External.Erlang("""(fun(LgF__, LgT__) -> case file:rename(LgF__, LgT__) of ok -> 0; {error, enoent} -> 0 end end)($0, $1)""")]
+#[compiler.external(.JavaScript("""(function(__F, __T){ var __fs = require('fs'); if (__fs.existsSync(__F)) __fs.renameSync(__F, __T); return 0; })($0, $1)"""), .Erlang("""(fun(LgF__, LgT__) -> case file:rename(LgF__, LgT__) of ok -> 0; {error, enoent} -> 0 end end)($0, $1)"""))]
 declare fn moveFile(source: string, target: string) -> i32;
 
-#[@External.Node("""(function(__P){ var __fs = require('fs'); if (__fs.existsSync(__P)) __fs.unlinkSync(__P); return 0; })($0)""")]
-#[@External.Erlang("""(fun(LgP__) -> case file:delete(LgP__) of ok -> 0; {error, enoent} -> 0 end end)($0)""")]
+#[compiler.external(.JavaScript("""(function(__P){ var __fs = require('fs'); if (__fs.existsSync(__P)) __fs.unlinkSync(__P); return 0; })($0)"""), .Erlang("""(fun(LgP__) -> case file:delete(LgP__) of ok -> 0; {error, enoent} -> 0 end end)($0)"""))]
 declare fn removeFile(path: string) -> i32;
 
 // The first reason `file` cannot be written, or "".
@@ -101,7 +98,7 @@ pub fn fileSink(
     file: LogFile,
     format: Format,
     levels: Levels,
-) -> @Result<LogSink, string> {
+) -> Result<LogSink, string> {
     val fileProblem = logFileProblem(file);
     if (fileProblem != "") throw "log.fileSink: " + fileProblem;
     val levelsText = levelsProblem(levels);

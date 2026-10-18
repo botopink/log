@@ -10,9 +10,9 @@ import {formats.Format};
 import {sink.LogSink, sink.setSink, sink.defaultSink};
 import {logfile.LogFile, logfile.fileSink, logfile.archiveName, logfile.logFileBytes, logfile.appendRotating, logfile.rotate};
 import {logging.Logger};
+import {compiler} from "std";
 
-#[@External.Node("""require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'bp-log-'))""")]
-#[@External.Erlang("""(fun() -> LgT__ = case os:getenv("TMPDIR") of false -> "/tmp"; LgV__ -> LgV__ end, LgD__ = filename:join(LgT__, "bp-log-" ++ integer_to_list(erlang:unique_integer([positive]))), ok = file:make_dir(LgD__), unicode:characters_to_binary(LgD__) end)()""")]
+#[compiler.external(.JavaScript("""require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'bp-log-'))"""), .Erlang("""(fun() -> LgT__ = case os:getenv("TMPDIR") of false -> "/tmp"; LgV__ -> LgV__ end, LgD__ = filename:join(LgT__, "bp-log-" ++ integer_to_list(erlang:unique_integer([positive]))), ok = file:make_dir(LgD__), unicode:characters_to_binary(LgD__) end)()"""))]
 declare fn freshDir() -> string;
 
 fn text(path: string) -> string {
@@ -28,7 +28,7 @@ fn infoAndUp() -> Levels {
     return Levels(root: Threshold.From(level: Level.Info), names: everyName());
 }
 
-fn refusal(r: @Result<LogSink, string>) -> string {
+fn refusal(r: Result<LogSink, string>) -> string {
     return case r {
         Ok(_) -> "";
         Error(reason) -> reason;

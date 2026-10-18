@@ -10,17 +10,15 @@ import {formats.LogRecord};
 import {sink.LogSink, sink.setSink, sink.defaultSink, sink.currentSink};
 import {logging.Logger};
 import {digest.errorDigest};
+import {compiler} from "std";
 
-#[@External.Node("""(function(){ globalThis.__bp_log_capture = []; return 0; })()""")]
-#[@External.Erlang("""(fun() -> put(lg_capture, []), 0 end)()""")]
+#[compiler.external(.JavaScript("""(function(){ globalThis.__bp_log_capture = []; return 0; })()"""), .Erlang("""(fun() -> put(lg_capture, []), 0 end)()"""))]
 declare fn captureReset() -> i32;
 
-#[@External.Node("""(function(__T){ (globalThis.__bp_log_capture ||= []).push(__T); return 7; })($0)""")]
-#[@External.Erlang("""(fun(LgT__) -> put(lg_capture, [LgT__ | case get(lg_capture) of undefined -> []; LgL__ -> LgL__ end]), 7 end)($0)""")]
+#[compiler.external(.JavaScript("""(function(__T){ (globalThis.__bp_log_capture ||= []).push(__T); return 7; })($0)"""), .Erlang("""(fun(LgT__) -> put(lg_capture, [LgT__ | case get(lg_capture) of undefined -> []; LgL__ -> LgL__ end]), 7 end)($0)"""))]
 declare fn capturePush(line: string) -> i32;
 
-#[@External.Node("""((globalThis.__bp_log_capture ||= []).join("\n"))""")]
-#[@External.Erlang("""(fun() -> iolist_to_binary(lists:join(<<"\n">>, lists:reverse(case get(lg_capture) of undefined -> []; LgL__ -> LgL__ end))) end)()""")]
+#[compiler.external(.JavaScript("""((globalThis.__bp_log_capture ||= []).join("\n"))"""), .Erlang("""(fun() -> iolist_to_binary(lists:join(<<"\n">>, lists:reverse(case get(lg_capture) of undefined -> []; LgL__ -> LgL__ end))) end)()"""))]
 declare fn captureLines() -> string;
 
 fn describe(r: LogRecord) -> string {

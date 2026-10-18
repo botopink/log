@@ -29,7 +29,7 @@
 //// the two hosts do not round a negative reading alike, and no clock answers
 //// one.
 
-import {json} from "std";
+import {json, failure.panic} from "std";
 import {io.clock} from "std";
 import {levels.Level, levels.levelRank, levels.rankName};
 
@@ -61,7 +61,7 @@ pub fn validFormats() -> string {
 
 // The schema a spelling names — exactly `ecs`, `gelf`, `logstash` or `plain`.
 // Anything else is an `Error` naming it and the four values.
-pub fn parseFormat(name: string) -> @Result<Format, string> {
+pub fn parseFormat(name: string) -> Result<Format, string> {
     if (name == "ecs") return Format.Ecs;
     if (name == "gelf") return Format.Gelf;
     if (name == "logstash") return Format.Logstash;
@@ -89,7 +89,7 @@ pub fn formatName(format: Format) -> string {
 fn millisDigits(millis: i64) -> string {
     val text = millis.toString();
     if (text.startsWith("-"))
-        @panic("log: a record's millis must be at least 0, got " + text);
+        panic("log: a record's millis must be at least 0, got " + text);
     return text.padStart(4, "0");
 }
 

@@ -9,17 +9,15 @@ import {levels.Level, levels.levelName, levels.Threshold, levels.Levels};
 import {formats.Format};
 import {sink.LogSink, sink.setSink, sink.defaultSink, sink.consoleSink, sink.fanOut};
 import {logging.Logger};
+import {compiler} from "std";
 
-#[@External.Node("""(function(){ globalThis.__bp_log_sinks = []; return 0; })()""")]
-#[@External.Erlang("""(fun() -> put(lg_sinks, []), 0 end)()""")]
+#[compiler.external(.JavaScript("""(function(){ globalThis.__bp_log_sinks = []; return 0; })()"""), .Erlang("""(fun() -> put(lg_sinks, []), 0 end)()"""))]
 declare fn heardReset() -> i32;
 
-#[@External.Node("""(function(__T){ (globalThis.__bp_log_sinks ||= []).push(__T); return 1; })($0)""")]
-#[@External.Erlang("""(fun(LgT__) -> put(lg_sinks, [LgT__ | case get(lg_sinks) of undefined -> []; LgL__ -> LgL__ end]), 1 end)($0)""")]
+#[compiler.external(.JavaScript("""(function(__T){ (globalThis.__bp_log_sinks ||= []).push(__T); return 1; })($0)"""), .Erlang("""(fun(LgT__) -> put(lg_sinks, [LgT__ | case get(lg_sinks) of undefined -> []; LgL__ -> LgL__ end]), 1 end)($0)"""))]
 declare fn heard(line: string) -> i32;
 
-#[@External.Node("""((globalThis.__bp_log_sinks ||= []).join(" | "))""")]
-#[@External.Erlang("""(fun() -> iolist_to_binary(lists:join(<<" | ">>, lists:reverse(case get(lg_sinks) of undefined -> []; LgL__ -> LgL__ end))) end)()""")]
+#[compiler.external(.JavaScript("""((globalThis.__bp_log_sinks ||= []).join(" | "))"""), .Erlang("""(fun() -> iolist_to_binary(lists:join(<<" | ">>, lists:reverse(case get(lg_sinks) of undefined -> []; LgL__ -> LgL__ end))) end)()"""))]
 declare fn heardLines() -> string;
 
 fn on(level: Level) -> Threshold {
@@ -40,7 +38,7 @@ fn tagged(tag: string, levels: Levels) -> LogSink {
     );
 }
 
-fn refusal(r: @Result<LogSink, string>) -> string {
+fn refusal(r: Result<LogSink, string>) -> string {
     return case r {
         Ok(_) -> "";
         Error(reason) -> reason;

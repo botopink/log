@@ -29,21 +29,21 @@
 
 import {levels.Level, levels.Levels, levels.levelRank, levels.otpLevel, levels.levelEnabled, levels.levelsProblem};
 import {formats.Format, formats.LogRecord, formats.renderPlain, formats.renderRecord};
+import {io.terminal.print} from "std";
+import {compiler} from "std";
 
 pub type LogSink(
     enabled: fn(logger: string, level: Level) -> bool,
     write: fn(record: LogRecord) -> i32,
 )
 
-#[@External.Node("""(function(__L, __T){ (__L === "error" ? console.error : __L === "warning" ? console.warn : console.log)(__T); return 0; })($0, $1)""")]
-#[@External.Erlang("""(fun(LgL__, LgT__) -> logger:log(binary_to_existing_atom(LgL__, utf8), "~ts", [LgT__]), 0 end)($0, $1)""")]
-#[@External.Wasm(fn: printLine)]
+#[compiler.external(.JavaScript("""(function(__L, __T){ (__L === "error" ? console.error : __L === "warning" ? console.warn : console.log)(__T); return 0; })($0, $1)"""), .Erlang("""(fun(LgL__, LgT__) -> logger:log(binary_to_existing_atom(LgL__, utf8), "~ts", [LgT__]), 0 end)($0, $1)"""), .Wasm(body: printLine))]
 declare fn hostWrite(otpLevel: string, line: string) -> i32;
 
 // wasm's host write: the line on standard output, whatever the level — the
 // one stream a wasm program writes on both of its hosts.
 fn printLine(otpLevel: string, line: string) -> i32 {
-    @print(line);
+    print(line);
     return 0;
 }
 
@@ -57,12 +57,10 @@ pub fn defaultSink() -> LogSink {
 }
 
 // LANGUAGE GAP: wasm has no binding that keeps a value across calls — the sink slot is refused on wasm.
-#[@External.Node("""(function(__S){ var __V = (globalThis.__bp_log ||= { sink: null }); __V.sink = __S; return 0; })($0)""")]
-#[@External.Erlang("""(fun(LgS__) -> persistent_term:put({log, sink}, LgS__), 0 end)($0)""")]
+#[compiler.external(.JavaScript("""(function(__S){ var __V = (globalThis.__bp_log ||= { sink: null }); __V.sink = __S; return 0; })($0)"""), .Erlang("""(fun(LgS__) -> persistent_term:put({log, sink}, LgS__), 0 end)($0)"""))]
 declare fn putSink(sink: LogSink) -> i32;
 
-#[@External.Node("""(function(__D){ var __V = (globalThis.__bp_log ||= { sink: null }); return __V.sink === null ? __D : __V.sink; })($0)""")]
-#[@External.Erlang("""persistent_term:get({log, sink}, $0)""")]
+#[compiler.external(.JavaScript("""(function(__D){ var __V = (globalThis.__bp_log ||= { sink: null }); return __V.sink === null ? __D : __V.sink; })($0)"""), .Erlang("""persistent_term:get({log, sink}, $0)"""))]
 declare fn sinkOr(fallback: LogSink) -> LogSink;
 
 // Install `sink` for every later record, in every process. Answers 0.
@@ -76,14 +74,14 @@ pub fn currentSink() -> LogSink {
 }
 
 fn writeLine(line: string) -> i32 {
-    @print(line);
+    print(line);
     return 0;
 }
 
 // A sink writing each record it takes as one `format` line on standard
 // output. A record passes when `levels` admits its logger and level. Refused
 // when `levels` cannot be resolved (`levelsProblem`).
-pub fn consoleSink(format: Format, levels: Levels) -> @Result<LogSink, string> {
+pub fn consoleSink(format: Format, levels: Levels) -> Result<LogSink, string> {
     val problem = levelsProblem(levels);
     if (problem != "") throw "log.consoleSink: " + problem;
     return LogSink(

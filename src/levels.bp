@@ -20,6 +20,8 @@
 //// `loggers` endpoint's run-time overrides — is the framework's: it builds a
 //// `Levels` and installs a sink over it again when one changes.
 
+import {failure.panic} from "std";
+
 pub type Level {
     Trace,
     Debug,
@@ -104,7 +106,7 @@ pub type Threshold {
 
 // The threshold a spelling names — the spellings `rankOf` reads, `off`
 // among them. Any other spelling is refused, naming the accepted ones.
-pub fn parseThreshold(name: string) -> @Result<Threshold, string> {
+pub fn parseThreshold(name: string) -> Result<Threshold, string> {
     val rank = rankOf(name);
     if (rank == 0) return Threshold.From(level: Level.Trace);
     if (rank == 1) return Threshold.From(level: Level.Debug);
@@ -174,7 +176,7 @@ pub fn thresholdFor(levels: Levels, logger: string) -> Threshold {
         val prefix = parts.join(".");
         found = setOn(levels, prefix);
         if (found.length > 1)
-            @panic(
+            panic(
                 "log.Levels: the logger name \"" + prefix + "\" is set twice",
             );
         parts = parts.slice(0, parts.length - 1);
