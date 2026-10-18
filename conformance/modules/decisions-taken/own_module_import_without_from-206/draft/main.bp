@@ -1,0 +1,3 @@
+//// Decision 206 — `import {…} from "<name>"` resolves only to a package — std, a bundled package or a declared dependency.
+
+pub fn main() -> void {}
