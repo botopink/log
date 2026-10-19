@@ -1,0 +1,7 @@
+# Decision 763 — (b): log's names are imported each from the module that declares it — `import {digest.errorDigest} from "log";`, `import {logging.Logger} from "log";` — and 195's `import {errorDigest, Logger} from "log";` is an example of its time, respelled in the subject file.
+
+log's root module declares nothing of its own: it holds `pub mod` lines only (`levels`, `formats`, `digest`, `sink`, `logfile`, `logging`, `reports`). The program therefore imports each name from the module that declares it, through the package: `digest.errorDigest`, `logging.Logger` and `levels.Level`, all `from "log"`. It writes one error through a `Logger` named `app.billing` and checks that the digest `logError` answers is the one `errorDigest` computes from the same module, class, message and frames — `true` — then prints whether trace and error are enabled under the sink in force. The leaf form of decision 195's time, `import {errorDigest, Logger} from "log";`, names what log's default module declares, and that module declares neither name, so it resolves nothing; no re-export lifts a name to the root.
+
+Cells in this repository that prove it: none yet. They come with front 156's Conformance step (decision 465). The other drafts of this directory that import log's names, [log_logger_injected_sink-195](../log_logger_injected_sink-195/docs.md) and [error_digest_one_scheme-194](../error_digest_one_scheme-194/docs.md), show the same rule.
+
+[draft/main.bp](draft/main.bp)

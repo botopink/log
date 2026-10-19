@@ -1,0 +1,15 @@
+//// Decision 763 — (b): log's names are imported each from the module that declares it — `import {digest.errorDigest} from "log";`, `import {logging.Logger} from "log";` — and 195's `import {errorDigest, Logger} from "log";` is an example of its time, respelled in the subject file.
+
+import {io.terminal} from "std";
+import {digest.errorDigest} from "log";
+import {logging.Logger} from "log";
+import {levels.Level} from "log";
+
+pub fn main() -> void {
+    val log = Logger(name: "app.billing");
+    val frames = "billing.bp:12 charge.bp:4";
+    val written = log.logError("app/billing", "badarith", "division by zero", frames, []);
+    val computed = errorDigest("app/billing", "badarith", "division by zero", frames);
+    terminal.print(written == computed);
+    terminal.print(log.isEnabled(Level.Trace), log.isEnabled(Level.Error));
+}
