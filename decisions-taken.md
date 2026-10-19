@@ -39,7 +39,7 @@ Generated from botopink/projects · specs/decisions-taken-steps.md — edit ther
 
 | # | Id | Rule in force | Binds | Cell |
 |---|---|---|---|---|
-| 220 | log-a | The runtime hands the error boundary the caught error's class and frames (erlang: `Class` and the stacktrace; node: `err.name`, `err.stack`); the boundary calls `log`'s `logError(module, errorClass, message, topFrames, fields)` with `module` the boundary's route segment (`"app/blog/[slug]/page"`); frames are normalised by `log`'s rule (194) | 05-jhonstart/26 step 4 · 106 | error_boundary_logs_class_frames |
+| 220 | log-a | The runtime hands the error boundary the caught error's class and frames (erlang: `Class` and the stacktrace; node: `err.name`, `err.stack`); the boundary calls `log`'s `logError(module, errorClass, message, topFrames, fields)` with `module` the boundary's route segment (`"app/blog/[slug]/page"`); frames are normalised by `log`'s rule (194) | 05-jhonstart/26 step 4 · 106 · `machine-1/150` (rakun, 776) | error_boundary_logs_class_frames |
 
 ## Rows 739–750 — rulings of the maintainer the 1.0.12 tree and `AGENTS.md` carried without a row (recorded 2026-10-19)
 
