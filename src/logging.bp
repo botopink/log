@@ -29,8 +29,8 @@ import {formats.LogRecord};
 import {sink.currentSink};
 import {digest.errorDigest};
 
-fn none() -> Array<#(string, string)> {
-    val empty: Array<#(string, string)> = [];
+fn none() -> array<#(string, string)> {
+    val empty: array<#(string, string)> = [];
     return empty;
 }
 
@@ -38,7 +38,7 @@ fn emitRecord(
     name: string,
     level: Level,
     message: string,
-    fields: Array<#(string, string)>,
+    fields: array<#(string, string)>,
     digest: string,
 ) -> i32 {
     val sink = currentSink();
@@ -77,7 +77,7 @@ pub type Logger(
     pub fn traceWith(
         self: Self,
         message: string,
-        fields: Array<#(string, string)>,
+        fields: array<#(string, string)>,
     ) -> i32 {
         return emitRecord(self.name, Level.Trace, message, fields, "");
     }
@@ -89,7 +89,7 @@ pub type Logger(
     pub fn debugWith(
         self: Self,
         message: string,
-        fields: Array<#(string, string)>,
+        fields: array<#(string, string)>,
     ) -> i32 {
         return emitRecord(self.name, Level.Debug, message, fields, "");
     }
@@ -101,7 +101,7 @@ pub type Logger(
     pub fn infoWith(
         self: Self,
         message: string,
-        fields: Array<#(string, string)>,
+        fields: array<#(string, string)>,
     ) -> i32 {
         return emitRecord(self.name, Level.Info, message, fields, "");
     }
@@ -113,7 +113,7 @@ pub type Logger(
     pub fn warnWith(
         self: Self,
         message: string,
-        fields: Array<#(string, string)>,
+        fields: array<#(string, string)>,
     ) -> i32 {
         return emitRecord(self.name, Level.Warn, message, fields, "");
     }
@@ -125,7 +125,7 @@ pub type Logger(
     pub fn errorWith(
         self: Self,
         message: string,
-        fields: Array<#(string, string)>,
+        fields: array<#(string, string)>,
     ) -> i32 {
         return emitRecord(self.name, Level.Error, message, fields, "");
     }
@@ -134,7 +134,7 @@ pub type Logger(
         self: Self,
         level: Level,
         message: string,
-        fields: Array<#(string, string)>,
+        fields: array<#(string, string)>,
     ) -> i32 {
         return emitRecord(self.name, level, message, fields, "");
     }
@@ -160,10 +160,10 @@ pub type Logger(
         errorClass: string,
         message: string,
         topFrames: string,
-        fields: Array<#(string, string)>,
+        fields: array<#(string, string)>,
     ) -> string {
         val digest = errorDigest(module, errorClass, message, topFrames);
-        var all: Array<#(string, string)> = [
+        var all: array<#(string, string)> = [
             #("error.module", module),
             #("error.type", errorClass),
             #("error.stack_trace", topFrames),

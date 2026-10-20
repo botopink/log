@@ -24,8 +24,8 @@ fn on(level: Level) -> Threshold {
     return Threshold.From(level: level);
 }
 
-fn noNames() -> Array<#(string, Threshold)> {
-    val none: Array<#(string, Threshold)> = [];
+fn noNames() -> array<#(string, Threshold)> {
+    val none: array<#(string, Threshold)> = [];
     return none;
 }
 
@@ -110,7 +110,7 @@ test "sinks: fanOut hands a record to every sink that takes it, in order" {
 }
 
 test "sinks: fanOut over no sink takes nothing" {
-    val none: Array<LogSink> = [];
+    val none: array<LogSink> = [];
     val sink = fanOut(none);
     val enabled = sink.enabled;
     try asserts.isFalse(enabled("app", Level.Error));

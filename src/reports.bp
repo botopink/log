@@ -62,7 +62,7 @@ pub fn writeRuntimeReport(
     message: string,
     stack: string,
 ) -> i32 {
-    var fields: Array<#(string, string)> = [#("report.kind", kind)];
+    var fields: array<#(string, string)> = [#("report.kind", kind)];
     if (stack != "") fields.push(#("error.stack_trace", stack));
     return Logger(name: "runtime").log(levelOf(level), message, fields);
 }

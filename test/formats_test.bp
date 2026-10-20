@@ -31,15 +31,15 @@ fn refusal(name: string) -> string {
     };
 }
 
-fn noFields() -> Array<#(string, string)> {
-    val empty: Array<#(string, string)> = [];
+fn noFields() -> array<#(string, string)> {
+    val empty: array<#(string, string)> = [];
     return empty;
 }
 
 fn rec(
     level: Level,
     message: string,
-    fields: Array<#(string, string)>,
+    fields: array<#(string, string)>,
 ) -> LogRecord {
     return LogRecord(
         millis: at("2026-01-01T00:00:00Z"),

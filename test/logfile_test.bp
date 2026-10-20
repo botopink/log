@@ -19,8 +19,8 @@ fn text(path: string) -> string {
     return fs.readText(path).unwrapOr("<none>");
 }
 
-fn everyName() -> Array<#(string, Threshold)> {
-    val none: Array<#(string, Threshold)> = [];
+fn everyName() -> array<#(string, Threshold)> {
+    val none: array<#(string, Threshold)> = [];
     return none;
 }
 

@@ -92,14 +92,14 @@ pub fn consoleSink(format: Format, levels: Levels) -> Result<LogSink, string> {
 
 // One sink over several: a record is wanted when any sink takes it, and each
 // sink that takes it writes it, in list order. Answers the sum of the writes.
-pub fn fanOut(sinks: Array<LogSink>) -> LogSink {
+pub fn fanOut(sinks: array<LogSink>) -> LogSink {
     return LogSink(
         enabled: { logger, level -> anyTakes(sinks, logger, level) },
         write: { r -> writeEach(sinks, r) },
     );
 }
 
-fn anyTakes(sinks: Array<LogSink>, logger: string, level: Level) -> bool {
+fn anyTakes(sinks: array<LogSink>, logger: string, level: Level) -> bool {
     var taken = false;
     for (sinks) { s ->
         val enabled = s.enabled;
@@ -108,7 +108,7 @@ fn anyTakes(sinks: Array<LogSink>, logger: string, level: Level) -> bool {
     return taken;
 }
 
-fn writeEach(sinks: Array<LogSink>, r: LogRecord) -> i32 {
+fn writeEach(sinks: array<LogSink>, r: LogRecord) -> i32 {
     var total = 0;
     for (sinks) { s ->
         val enabled = s.enabled;

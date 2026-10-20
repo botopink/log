@@ -132,7 +132,7 @@ pub fn thresholdAdmits(threshold: Threshold, level: Level) -> bool {
 // The thresholds of a program's loggers: `root`, and one per name.
 pub type Levels(
     root: Threshold,
-    names: Array<#(string, Threshold)>,
+    names: array<#(string, Threshold)>,
 )
 
 // The first reason `levels` cannot be resolved, or "": an empty name, a name
@@ -158,8 +158,8 @@ fn nameProblem(name: string, seen: string[]) -> string {
     return "";
 }
 
-fn setOn(levels: Levels, name: string) -> Array<Threshold> {
-    var found: Array<Threshold> = [];
+fn setOn(levels: Levels, name: string) -> array<Threshold> {
+    var found: array<Threshold> = [];
     for (levels.names) { entry ->
         if (entry._0 == name) found.push(entry._1);
     }
@@ -171,7 +171,7 @@ fn setOn(levels: Levels, name: string) -> Array<Threshold> {
 // twice panics, naming it.
 pub fn thresholdFor(levels: Levels, logger: string) -> Threshold {
     var parts: string[] = logger.split(".");
-    var found: Array<Threshold> = [];
+    var found: array<Threshold> = [];
     while (found.length == 0 && parts.length > 0) {
         val prefix = parts.join(".");
         found = setOn(levels, prefix);

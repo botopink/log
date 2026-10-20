@@ -28,7 +28,7 @@ pub fn main() -> void {
 
     // The first name set, read through `?.`: `?string`, never `??string`.
     val first = levels.names.at(0)?._0 ?? "(root only)";
-    val none: Array<#(string, Threshold)> = [];
+    val none: array<#(string, Threshold)> = [];
     val missing = none.at(0)?._0 ?? "(root only)";
     terminal.print(first, " ", missing, "\n");
 
