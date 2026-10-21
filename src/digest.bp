@@ -51,7 +51,7 @@ pub fn stripLineNumbers(frame: string) -> string {
 // each with its line numbers stripped, joined by one space.
 pub fn topFramesOf(frames: string) -> string {
     var kept: string[] = [];
-    for (frames.replaceAll("\n", " ").replaceAll("\t", " ").split(" ")) { f ->
+    for f in frames.replaceAll("\n", " ").replaceAll("\t", " ").split(" ") {
         val t = f.trim();
         if (t != "" && kept.length < 3) kept.push(stripLineNumbers(t));
     }

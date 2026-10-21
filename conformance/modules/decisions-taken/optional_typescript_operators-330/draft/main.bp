@@ -6,7 +6,7 @@ import {levels.Level, levels.Threshold, levels.Levels, levels.parseThreshold, le
 // The threshold set on exactly `logger`, `null` when the name has none.
 fn setOn(levels: Levels, logger: string) -> ?Threshold {
     var found: ?Threshold = null;
-    for (levels.names) { entry ->
+    for entry in levels.names {
         if (entry._0 == logger) found = entry._1;
     }
     return found;

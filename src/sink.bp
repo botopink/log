@@ -101,7 +101,7 @@ pub fn fanOut(sinks: array<LogSink>) -> LogSink {
 
 fn anyTakes(sinks: array<LogSink>, logger: string, level: Level) -> bool {
     var taken = false;
-    for (sinks) { s ->
+    for s in sinks {
         val enabled = s.enabled;
         if (taken == false && enabled(logger, level)) taken = true;
     }
@@ -110,7 +110,7 @@ fn anyTakes(sinks: array<LogSink>, logger: string, level: Level) -> bool {
 
 fn writeEach(sinks: array<LogSink>, r: LogRecord) -> i32 {
     var total = 0;
-    for (sinks) { s ->
+    for s in sinks {
         val enabled = s.enabled;
         val write = s.write;
         if (enabled(r.logger, r.level)) total = total + write(r);

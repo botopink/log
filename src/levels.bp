@@ -140,7 +140,7 @@ pub type Levels(
 pub fn levelsProblem(levels: Levels) -> string {
     var problem = "";
     var seen: string[] = [];
-    for (levels.names) { entry ->
+    for entry in levels.names {
         if (problem == "") problem = nameProblem(entry._0, seen);
         seen.push(entry._0);
     }
@@ -160,7 +160,7 @@ fn nameProblem(name: string, seen: string[]) -> string {
 
 fn setOn(levels: Levels, name: string) -> array<Threshold> {
     var found: array<Threshold> = [];
-    for (levels.names) { entry ->
+    for entry in levels.names {
         if (entry._0 == name) found.push(entry._1);
     }
     return found;

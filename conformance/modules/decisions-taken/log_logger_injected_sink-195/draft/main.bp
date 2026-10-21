@@ -11,7 +11,7 @@ import {sink.LogSink, sink.setSink, sink.defaultSink} from "log";
 fn describe(r: LogRecord) -> string {
     var parts: string[] = [levelName(r.level), r.logger, r.message];
     if (r.digest != "") parts.push("digest=" + r.digest);
-    for (r.fields) { f ->
+    for f in r.fields {
         parts.push(f._0 + "=" + f._1);
     }
     return parts.join(" ");

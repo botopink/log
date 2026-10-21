@@ -25,7 +25,7 @@ fn boundary(route: string, caught: Caught) -> string {
 fn describe(r: LogRecord) -> string {
     var parts: string[] = [levelName(r.level), r.logger, r.message, "digest="
         + r.digest];
-    for (r.fields) { f ->
+    for f in r.fields {
         parts.push(f._0 + "=" + f._1);
     }
     return parts.join(" ");

@@ -12,7 +12,7 @@ fn printing() -> LogSink {
         enabled: { logger, level -> true },
         write: { r ->
             var parts: string[] = [r.message, "digest=" + r.digest];
-            for (r.fields) { f ->
+            for f in r.fields {
                 parts.push(f._0 + "=" + f._1);
             }
             terminal.print(parts.join(" "), "\n");

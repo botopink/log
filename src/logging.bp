@@ -168,7 +168,7 @@ pub type Logger(
             #("error.type", errorClass),
             #("error.stack_trace", topFrames),
         ];
-        for (fields) { f ->
+        for f in fields {
             all.push(f);
         }
         val _w = emitRecord(self.name, Level.Error, message, all, digest);
