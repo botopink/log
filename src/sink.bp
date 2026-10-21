@@ -21,8 +21,8 @@
 //// is refused there at its declaration (146), never answered wrongly.
 ////
 //// THE SINKS `log` SHIPS (decision 349): `consoleSink` writes each record's
-//// line on standard output through `@print` — a builtin every target lowers,
-//// so no host cell; `fileSink` (`logfile.bp`) appends to a file it rotates;
+//// line on standard output through `terminal.print` — std's one print on every
+//// target, so no host cell; `fileSink` (`logfile.bp`) appends to a file it rotates;
 //// `fanOut` hands each record to every sink of a list that takes it. Each
 //// takes a `Levels` (per-name thresholds), and a framework installs the one
 //// it built with `setSink`.

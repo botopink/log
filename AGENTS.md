@@ -52,8 +52,8 @@ log/
 │   ├── digest.bp       stripLineNumbers, topFramesOf, digestInput, errorDigest, clientErrorBody
 │   ├── sink.bp         LogSink(enabled, write), defaultSink, setSink, currentSink   (the sink slot: templates),
 │   │                   consoleSink, fanOut
-│   ├── logfile.bp      LogFile(path, maxBytes, maxFiles), fileSink, logFileProblem, archiveName,
-│   │                   logFileBytes, rotate, appendRotating   (the four file cells: templates)
+│   ├── logfile.bp      LogFile(path, maxBytes, maxFiles), LogError, fileSink, logFileProblem, archiveName,
+│   │                   logFileBytes, rotate, appendRotating   (the four file cells: `result: true`, answering `Result<_, LogError>`)
 │   ├── logging.bp      Logger(name): trace/debug/info/warn/error (+ …With fields), log, isEnabled,
 │   │                   lazily, logError
 │   └── reports.bp      captureRuntimeReports, writeRuntimeReport   (the capture: templates)

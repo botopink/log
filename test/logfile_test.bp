@@ -70,7 +70,7 @@ test "logfile: a write that reaches maxBytes rotates, the oldest archive goes" {
     val path = dir + "/r.log";
     val file = LogFile(path: path, maxBytes: 10l, maxFiles: 2);
     val _1 = appendRotating(file, "aaaa");
-    val sizeOne = logFileBytes(path);
+    val sizeOne = logFileBytes(path).unwrapOr(-9l);
     val _2 = appendRotating(file, "bbbb");
     val liveAfterTwo = fs.exists(path);
     val firstArchive = text(archiveName(path, 0));
@@ -103,7 +103,7 @@ test "logfile: with no archive kept, a full file is deleted and starts again" {
     val after = fs.exists(path);
     val archived = fs.exists(archiveName(path, 0));
     val _3 = rotate(file);
-    val bytes = logFileBytes(path);
+    val bytes = logFileBytes(path).unwrapOr(-9l);
     val _x = fs.removeTree(dir);
     try asserts.equals(before, "abc\n");
     try asserts.isFalse(after);
@@ -152,4 +152,22 @@ test "logfile: fileSink refuses a file or levels it cannot use" {
         ),
         "log.fileSink: log.Levels: the logger name \"x.\" has an empty segment",
     );
+}
+
+test "logfile: a write under a path that is a file answers an Error, not a raise" {
+    val dir = freshDir();
+    val blocker = dir + "/blocker";
+    val _b = fs.writeText(blocker, "x");
+    val file = LogFile(path: blocker + "/app.log", maxBytes: 10l, maxFiles: 1);
+    val failed = case appendRotating(file, "line") {
+        Ok(_) -> false;
+        Error(_) -> true;
+    };
+    val sink = try fileSink(file, Format.Plain, infoAndUp());
+    val _s = setSink(sink);
+    val answer = Logger(name: "app").info("dropped");
+    val _d = setSink(defaultSink());
+    val _x = fs.removeTree(dir);
+    try asserts.isTrue(failed);
+    try asserts.equals(answer, -1);
 }

@@ -1,0 +1,34 @@
+import {io.fs, io.os, io.terminal} from "std";
+import {levels.Level, levels.Threshold, levels.Levels} from "log";
+import {formats.Format} from "log";
+import {sink.setSink, sink.defaultSink} from "log";
+import {logfile.LogFile, logfile.LogError, logfile.fileSink, logfile.appendRotating} from "log";
+import {logging.Logger} from "log";
+
+fn kind(r: Result<i32, LogError>) -> string {
+    return case r {
+        Ok(_) -> "ok";
+        Error(e) -> case e {
+            AppendFailed(path: _, message: _) -> "AppendFailed";
+            SizeFailed(path: _, message: _) -> "SizeFailed";
+            MoveFailed(path: _, message: _) -> "MoveFailed";
+            RemoveFailed(path: _, message: _) -> "RemoveFailed";
+        };
+    };
+}
+
+pub fn main() -> void {
+    val dir = os.tmpdir() + "/bp-log-921-unwritable";
+    val _c = fs.removeTree(dir);
+    val _m = fs.mkdirRecursive(dir);
+    val blocker = dir + "/blocker";
+    val _b = fs.writeText(blocker, "x");
+    val file = LogFile(path: blocker + "/app.log", maxBytes: 10l, maxFiles: 1);
+    terminal.print(kind(appendRotating(file, "line")));
+    val levels = Levels(root: Threshold.From(level: Level.Info), names: []);
+    val sink = fileSink(file, Format.Plain, levels).unwrapOr(defaultSink());
+    val _s = setSink(sink);
+    terminal.print(Logger(name: "app").info("lost"));
+    val _d = setSink(defaultSink());
+    val _x = fs.removeTree(dir);
+}

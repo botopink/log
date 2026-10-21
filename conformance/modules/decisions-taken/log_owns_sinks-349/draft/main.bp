@@ -54,9 +54,9 @@ pub fn main() -> void {
     val _s = setSink(sink);
     val _c = captureRuntimeReports();
     val _q = Logger(name: "db").info("never written");
-    terminal.print(logFileBytes(path), "\n");
+    terminal.print(logFileBytes(path).unwrapOr(-1l), "\n");
     val _w = Logger(name: "http.access").warn("slow request");
-    terminal.print(logFileBytes(path) > 0l, "\n");
+    terminal.print(logFileBytes(path).unwrapOr(-1l) > 0l, "\n");
 
     // A levels value the file sink cannot resolve is refused by it.
     val twice = Levels(

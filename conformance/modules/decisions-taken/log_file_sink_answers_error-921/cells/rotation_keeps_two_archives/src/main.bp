@@ -1,0 +1,24 @@
+import {io.fs, io.os, io.terminal} from "std";
+import {logfile.LogFile, logfile.LogError, logfile.appendRotating, logfile.archiveName} from "log";
+
+fn wrote(r: Result<i32, LogError>) -> string {
+    return case r {
+        Ok(n) -> "ok " + n.toString();
+        Error(e) -> e.message();
+    };
+}
+
+pub fn main() -> void {
+    val dir = os.tmpdir() + "/bp-log-921-rotation";
+    val _c = fs.removeTree(dir);
+    val path = dir + "/app.log";
+    val file = LogFile(path: path, maxBytes: 10l, maxFiles: 2);
+    terminal.print(wrote(appendRotating(file, "aaaaaaaaaa")));
+    terminal.print(wrote(appendRotating(file, "bbbbbbbbbb")));
+    terminal.print(wrote(appendRotating(file, "cccccccccc")));
+    terminal.print(fs.exists(path));
+    terminal.print(fs.readText(archiveName(path, 0)).unwrapOr("<none>"));
+    terminal.print(fs.readText(archiveName(path, 1)).unwrapOr("<none>"));
+    terminal.print(fs.exists(archiveName(path, 2)));
+    val _x = fs.removeTree(dir);
+}

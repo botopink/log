@@ -168,8 +168,8 @@ the file. It is an `Error` when `logFileProblem(file)` or `levelsProblem(levels)
 - Rotation is `logger_std_h`'s, written once so every target rotates alike. After a write leaves the file at `maxBytes`
   or more (`logfile.appendRotating(file, line)`), `logfile.rotate(file)` renames the files as below, and with `maxFiles`
   0 the file is deleted and starts again; the live file and its archives never hold more than `maxFiles + 1` files.
-  `logfile.archiveName(path, index)` answers `<path>.<index>`, `.0` the newest. `logfile.logFileBytes(path)` answers the
-  size in bytes, `-1` when there is no file.
+  `logfile.archiveName(path, index)` answers `<path>.<index>`, `.0` the newest. `logfile.logFileBytes(path)` answers
+  `Result<i64, LogError>`: the size in bytes, `-1` when there is no file.
 
 ```text
 <path>.<maxFiles - 1>   deleted
@@ -177,8 +177,11 @@ the file. It is an `Error` when `logFileProblem(file)` or `levelsProblem(levels)
 <path>                  becomes <path>.0
 ```
 
-Every host call fails loudly: a line that cannot be appended, a size that cannot be read (other than a file that is not
-there), or a rename or delete that fails raises on the host, because a log that silently stops writing is a lost log. A
+Every host call fails loudly and typed (decision 921): the four file cells write `result: true`, and a line that cannot
+be appended, a size that cannot be read (other than a file that is not there), or a rename or delete that fails answers
+`Error` of `logfile.LogError` (`AppendFailed`, `SizeFailed`, `MoveFailed`, `RemoveFailed`, each with the `path` and the
+host's `message`) from `appendRotating`, `rotate` and `logFileBytes`, never a raise, because a log that silently stops
+writing is a lost log. The sink `fileSink` builds answers `-1` for a record it could not write. A
 file that is not there reads `-1` bytes and is skipped by a rename or a delete. The total size cap that rakun folds into
 the archive count stays rakun's; it hands `fileSink` the folded count.
 

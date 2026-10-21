@@ -1,0 +1,1 @@
+{ "name": "rotation_keeps_two_archives", "dependencies": { "log": { "path": "../../../../../.." } } }
