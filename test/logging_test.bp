@@ -28,7 +28,7 @@ fn describe(r: LogRecord) -> string {
         r.message,
         "digest=" + r.digest,
     ];
-    for f in r.fields {
+    for (r.fields) { f ->
         parts.push(f._0 + "=" + f._1);
     }
     return parts.join(" ");

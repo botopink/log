@@ -31,7 +31,7 @@ declare fn raiseRuntimeFault() -> i32;
 
 fn fieldOf(r: LogRecord, name: string) -> string {
     var found = "";
-    for f in r.fields {
+    for (r.fields) { f ->
         if (f._0 == name) found = f._1;
     }
     return found;
