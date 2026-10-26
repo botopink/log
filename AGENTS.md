@@ -172,7 +172,7 @@ pub fn captureRuntimeReports() -> i32
 
 Decision 349: every cell is bound on erlang/beam, commonJS and wasm, never on
 some only. Where wasm has no binding, the cell carries a `// LANGUAGE GAP`
-marker naming the row of `specs/1.0.12-beta/language-gaps.md`, and a wasm
+marker naming the row of `specs/milestone/language-gaps.md`, and a wasm
 build is refused at every function reaching it (146) — never compiled
 silently.
 
