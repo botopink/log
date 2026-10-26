@@ -38,7 +38,7 @@ the module-qualified form, `import {logging.Logger, digest.errorDigest} from
 
 ```text
 log/
-├── botopink.json     "name": "log", "target": "erlang", "targets": ["erlang", "commonJS"], no dependencies
+├── botopink.json     "name": "log", "target": "erlang", "targets": ["erlang", "beam", "commonJS"] (no wasm: `putSink` (its own) and std `io.clock.nowMillis` / `toCivil` and `io.fs.readText` have no `.Wasm(…)` binding, decision 993 (4)), no dependencies
 ├── AGENTS.md         ← you are here
 ├── src/
 │   ├── root.bp         pub mod levels; formats; digest; sink; logfile; logging; reports
